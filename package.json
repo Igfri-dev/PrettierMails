@@ -1,0 +1,18 @@
+{
+  "name": "prettier-mails",
+  "version": "1.0.0",
+  "description": "Visual Email Builder & Multi-Recipient Dispatcher with React and Node.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client",
+    "build:client": "npm run build --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "keywords": ["email-builder", "react", "nodemailer", "youtube-email", "visual-editor"],
+  "author": "",
+  "license": "ISC"
+}
