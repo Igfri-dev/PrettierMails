@@ -10,9 +10,16 @@
     "build:client": "npm run build --prefix client"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "puppeteer-core": "^25.10.0"
   },
-  "keywords": ["email-builder", "react", "nodemailer", "youtube-email", "visual-editor"],
+  "keywords": [
+    "email-builder",
+    "react",
+    "nodemailer",
+    "youtube-email",
+    "visual-editor"
+  ],
   "author": "",
-  "license": "ISC"
+  "license": "GPL-3.0-or-later"
 }

@@ -247,11 +247,12 @@ export default function AiGeneratorModal({
               </span>
             </label>
             <textarea
+              id="ai-prompt-input"
               rows={3}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe el objetivo, el tema, a quién va dirigido y qué estilo deseas (ej. un correo de bienvenida para nuevos usuarios con un video tutorial, 3 pasos en cajas y botón de inicio)..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 leading-relaxed"
+              placeholder="Describe el correo que deseas generar con IA... (ej: 'Escribe un correo promocional para el lanzamiento de...')"
+              className="w-full bg-[#0d121c] border-2 border-purple-500/70 focus:border-purple-400 rounded-xl px-4 py-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none shadow-[0_0_20px_rgba(168,85,247,0.2)] transition leading-relaxed font-normal"
             />
           </div>
 
@@ -305,19 +306,23 @@ export default function AiGeneratorModal({
 
               {/* Video Chips */}
               {videoLinks.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
+                <div className="flex flex-wrap gap-2 pt-1.5">
                   {videoLinks.map((v, i) => (
                     <span
                       key={i}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-mono"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#1e2638] border border-red-500/30 text-slate-200 text-xs shadow-sm"
                     >
-                      <span className="truncate max-w-xs">{v}</span>
+                      <span className="w-4 h-4 rounded-full bg-red-600 flex items-center justify-center text-white text-[9px] font-bold">
+                        ▶
+                      </span>
+                      <span className="truncate max-w-xs text-[11px] font-medium">Video: {v.replace(/^https?:\/\/(www\.)?youtube\.com\/watch\?v=/, '').substring(0, 24)}...</span>
                       <button
                         type="button"
                         onClick={() => setVideoLinks(prev => prev.filter((_, idx) => idx !== i))}
-                        className="hover:text-white"
+                        className="text-slate-400 hover:text-red-400 transition ml-1"
+                        title="Eliminar"
                       >
-                        <X className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </span>
                   ))}
@@ -328,8 +333,8 @@ export default function AiGeneratorModal({
             {/* Image Links */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
-                Adjuntar Link de Imagen (Banner, Logo, Ilustración)
+                <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                Imágenes:
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -338,36 +343,35 @@ export default function AiGeneratorModal({
                   onChange={(e) => setImageInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddImage())}
                   placeholder="https://images.unsplash.com/... o https://example.com/logo.png"
-                  className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="flex-1 bg-[#0f1422] border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
                 />
                 <button
                   type="button"
                   onClick={() => handleAddImage()}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 transition"
+                  className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-semibold flex items-center gap-1 transition"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Añadir Imagen</span>
                 </button>
               </div>
-              <p className="text-[10px] text-slate-500">
-                💡 Los enlaces pegados en este campo se incluirán automáticamente en el correo.
-              </p>
 
               {/* Image Chips */}
               {imageLinks.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
+                <div className="flex flex-wrap gap-2 pt-1.5">
                   {imageLinks.map((img, i) => (
                     <span
                       key={i}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#1e2638] border border-blue-500/30 text-slate-200 text-xs shadow-sm"
                     >
-                      <span className="truncate max-w-xs">{img}</span>
+                      <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                      <span className="truncate max-w-xs text-[11px] font-medium">Imagen: {img.split('/').pop().substring(0, 20) || 'Imagen'}</span>
                       <button
                         type="button"
                         onClick={() => setImageLinks(prev => prev.filter((_, idx) => idx !== i))}
-                        className="hover:text-white"
+                        className="text-slate-400 hover:text-red-400 transition ml-1"
+                        title="Eliminar"
                       >
-                        <X className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </span>
                   ))}
@@ -478,7 +482,7 @@ export default function AiGeneratorModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-[#232d42] bg-[#0c101a] flex items-center justify-between">
           <button
             type="button"
             onClick={onClose}
@@ -491,7 +495,7 @@ export default function AiGeneratorModal({
             type="button"
             onClick={handleGenerate}
             disabled={isLoading || !prompt.trim()}
-            className="flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-brand-600 via-indigo-600 to-purple-600 hover:from-brand-500 hover:to-purple-500 shadow-lg shadow-brand-500/25 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition"
+            className="flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-xl shadow-purple-500/30 border border-purple-400/30 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition"
           >
             {isLoading ? (
               <>
@@ -504,8 +508,8 @@ export default function AiGeneratorModal({
               </>
             ) : (
               <>
-                <Sparkles className="w-4 h-4" />
-                <span>Generar Correo con IA</span>
+                <span>Generar Correo</span>
+                <Sparkles className="w-4 h-4 text-amber-300" />
               </>
             )}
           </button>

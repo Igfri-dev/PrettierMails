@@ -396,40 +396,62 @@ export default function BlockRenderer({
             }}
           >
             {data.children && data.children.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {data.children.map((child) => (
-                  <div key={child.id} className="pointer-events-none">
+                  <div key={child.id} className="relative">
                     {child.type === 'heading' && (
                       <h3
                         style={{
-                          fontSize: child.data.fontSize || '18px',
-                          fontWeight: child.data.fontWeight || '700',
-                          color: child.data.color || '#0f172a',
-                          textAlign: child.data.textAlign || 'left',
+                          fontSize: child.data?.fontSize || '18px',
+                          fontWeight: child.data?.fontWeight || '700',
+                          color: child.data?.color || '#0f172a',
+                          textAlign: child.data?.textAlign || 'left',
                           marginBottom: '4px',
+                          lineHeight: 1.3,
                         }}
                       >
-                        {child.data.content}
+                        {child.data?.content || 'Título en caja'}
                       </h3>
                     )}
                     {child.type === 'text' && (
                       <div
                         style={{
-                          fontSize: child.data.fontSize || '14px',
-                          fontWeight: child.data.fontWeight || '400',
-                          color: child.data.color || '#475569',
-                          lineHeight: child.data.lineHeight || '1.6',
+                          fontSize: child.data?.fontSize || '14px',
+                          fontWeight: child.data?.fontWeight || '400',
+                          color: child.data?.color || '#475569',
+                          lineHeight: child.data?.lineHeight || '1.6',
+                          textAlign: child.data?.textAlign || 'left',
                           whiteSpace: 'pre-line',
                         }}
                       >
-                        {renderFormattedText(child.data.content)}
+                        {renderFormattedText(child.data?.content || 'Texto dentro de la caja...')}
+                      </div>
+                    )}
+                    {child.type === 'button' && (
+                      <div style={{ textAlign: child.data?.alignment || 'left', paddingTop: '6px', paddingBottom: '4px' }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            backgroundColor: child.data?.backgroundColor || '#2563eb',
+                            color: child.data?.textColor || '#ffffff',
+                            padding: `${child.data?.paddingY || '10px'} ${child.data?.paddingX || '20px'}`,
+                            borderRadius: child.data?.borderRadius || '8px',
+                            fontWeight: child.data?.fontWeight || '700',
+                            fontSize: child.data?.fontSize || '13px',
+                          }}
+                        >
+                          {child.data?.text || 'Botón de Acción'}
+                        </span>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-slate-400 italic">Caja contenedora vacía</p>
+              <div className="p-4 border border-dashed border-slate-300 rounded-xl text-center">
+                <p className="text-xs text-slate-500 font-semibold">Caja contenedora vacía</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Usa el inspector lateral para agregar textos, títulos o botones.</p>
+              </div>
             )}
           </div>
         </div>

@@ -18,7 +18,8 @@ import {
   Columns2,
   Table,
   Plus,
-  X
+  X,
+  Type
 } from 'lucide-react';
 import YoutubeIcon from '../YoutubeIcon.jsx';
 import { extractYouTubeId, getYouTubeThumbnail } from '../../utils/youtubeHelper.js';
@@ -46,6 +47,95 @@ export default function StyleInspector({
 
   const update = (key, value) => {
     onUpdateBlockData(block.id, { [key]: value });
+  };
+
+  // Box / Container helpers
+  const updateBoxChild = (childId, field, val) => {
+    const children = (data.children || []).map((c) => {
+      if (c.id === childId) {
+        return {
+          ...c,
+          data: {
+            ...(c.data || {}),
+            [field]: val,
+          },
+        };
+      }
+      return c;
+    });
+    update('children', children);
+  };
+
+  const addBoxChild = (childType) => {
+    const childId = `c-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    let newChild = null;
+
+    if (childType === 'heading') {
+      newChild = {
+        id: childId,
+        type: 'heading',
+        data: {
+          content: 'Nuevo Título en Caja',
+          fontSize: '18px',
+          fontWeight: '700',
+          color: '#0f172a',
+          textAlign: 'left',
+          paddingTop: '0px',
+          paddingBottom: '4px',
+        },
+      };
+    } else if (childType === 'text') {
+      newChild = {
+        id: childId,
+        type: 'text',
+        data: {
+          content: 'Escribe aquí tu texto o viñetas (usa **negrita** para destacar)...',
+          fontSize: '14px',
+          fontWeight: '400',
+          color: '#475569',
+          textAlign: 'left',
+          lineHeight: '1.6',
+          paddingTop: '0px',
+          paddingBottom: '0px',
+        },
+      };
+    } else if (childType === 'button') {
+      newChild = {
+        id: childId,
+        type: 'button',
+        data: {
+          text: 'Botón de Acción &rarr;',
+          url: 'https://',
+          backgroundColor: '#2563eb',
+          textColor: '#ffffff',
+          borderRadius: '8px',
+          fontSize: '13px',
+          fontWeight: '700',
+          paddingX: '20px',
+          paddingY: '9px',
+          alignment: 'left',
+        },
+      };
+    }
+
+    if (newChild) {
+      update('children', [...(data.children || []), newChild]);
+    }
+  };
+
+  const removeBoxChild = (childId) => {
+    const children = (data.children || []).filter((c) => c.id !== childId);
+    update('children', children);
+  };
+
+  const moveBoxChild = (index, direction) => {
+    const children = [...(data.children || [])];
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= children.length) return;
+    const temp = children[index];
+    children[index] = children[targetIdx];
+    children[targetIdx] = temp;
+    update('children', children);
   };
 
   // Grid helpers
@@ -423,6 +513,258 @@ export default function StyleInspector({
                   {p.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* BOX INNER CONTENT / CHILDREN EDITOR */}
+          <div className="pt-3 border-t border-slate-800/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Type className="w-3.5 h-3.5 text-brand-400" />
+                  <span>Contenido Interior de la Caja</span>
+                </label>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Modifica, reordena o añade textos, títulos y botones dentro de la caja.
+                </p>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700">
+                {(data.children || []).length} elem.
+              </span>
+            </div>
+
+            {/* Quick Add Child Element Buttons */}
+            <div className="flex items-center gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => addBoxChild('heading')}
+                className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-slate-200 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 hover:border-brand-500/50 transition flex items-center justify-center gap-1"
+              >
+                <Plus className="w-3 h-3 text-brand-400" />
+                <span>+ Título</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => addBoxChild('text')}
+                className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-slate-200 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 hover:border-emerald-500/50 transition flex items-center justify-center gap-1"
+              >
+                <Plus className="w-3 h-3 text-emerald-400" />
+                <span>+ Párrafo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => addBoxChild('button')}
+                className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-slate-200 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 hover:border-indigo-500/50 transition flex items-center justify-center gap-1"
+              >
+                <Plus className="w-3 h-3 text-indigo-400" />
+                <span>+ Botón</span>
+              </button>
+            </div>
+
+            {/* Child Elements List */}
+            <div className="space-y-3 pt-2">
+              {(data.children || []).length === 0 ? (
+                <div className="p-4 rounded-xl border border-dashed border-slate-800 text-center">
+                  <p className="text-xs text-slate-400 font-medium">La caja no tiene elementos aún.</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Usa los botones de arriba para añadir un título, texto o botón.</p>
+                </div>
+              ) : (
+                (data.children || []).map((child, cIdx) => (
+                  <div
+                    key={child.id}
+                    className="p-3 rounded-xl bg-[#0e1320] border border-slate-800 space-y-2.5 relative group"
+                  >
+                    {/* Child Element Header Bar */}
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/60 text-xs">
+                      <div className="flex items-center space-x-1.5">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                          child.type === 'heading' 
+                            ? 'bg-brand-500/20 text-brand-300 border border-brand-500/30' 
+                            : child.type === 'button'
+                            ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        }`}>
+                          {child.type === 'heading' ? 'Título' : child.type === 'button' ? 'Botón CTA' : 'Párrafo'}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">#{cIdx + 1}</span>
+                      </div>
+
+                      <div className="flex items-center space-x-1">
+                        <button
+                          type="button"
+                          onClick={() => moveBoxChild(cIdx, -1)}
+                          disabled={cIdx === 0}
+                          title="Subir"
+                          className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 transition"
+                        >
+                          <ArrowUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveBoxChild(cIdx, 1)}
+                          disabled={cIdx === (data.children || []).length - 1}
+                          title="Bajar"
+                          className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 transition"
+                        >
+                          <ArrowDown className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeBoxChild(child.id)}
+                          title="Eliminar elemento de la caja"
+                          className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Child Content Inputs */}
+                    {child.type === 'heading' && (
+                      <div className="space-y-2">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-medium text-slate-300">Texto del Título</label>
+                          <input
+                            type="text"
+                            value={child.data?.content || ''}
+                            onChange={(e) => updateBoxChild(child.id, 'content', e.target.value)}
+                            placeholder="Escribe el título aquí..."
+                            className="w-full bg-[#070b13] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-400">Color</label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={child.data?.color || '#0f172a'}
+                                onChange={(e) => updateBoxChild(child.id, 'color', e.target.value)}
+                                className="w-6 h-6 rounded border border-slate-700 bg-transparent cursor-pointer"
+                              />
+                              <span className="text-[10px] font-mono text-slate-400">{child.data?.color || '#0f172a'}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-400">Tamaño</label>
+                            <select
+                              value={child.data?.fontSize || '18px'}
+                              onChange={(e) => updateBoxChild(child.id, 'fontSize', e.target.value)}
+                              className="w-full bg-[#070b13] border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                            >
+                              <option value="15px">15px (Sutil)</option>
+                              <option value="16px">16px (Pequeño)</option>
+                              <option value="18px">18px (Mediano)</option>
+                              <option value="20px">20px (Grande)</option>
+                              <option value="24px">24px (Hero)</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {child.type === 'text' && (
+                      <div className="space-y-2">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-medium text-slate-300">Contenido del Texto</label>
+                          <textarea
+                            rows={3}
+                            value={child.data?.content || ''}
+                            onChange={(e) => updateBoxChild(child.id, 'content', e.target.value)}
+                            placeholder="Escribe el texto aquí... Puedes usar **negrita** para resaltar palabras."
+                            className="w-full bg-[#070b13] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500 leading-relaxed"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-400">Color de Texto</label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={child.data?.color || '#475569'}
+                                onChange={(e) => updateBoxChild(child.id, 'color', e.target.value)}
+                                className="w-6 h-6 rounded border border-slate-700 bg-transparent cursor-pointer"
+                              />
+                              <span className="text-[10px] font-mono text-slate-400">{child.data?.color || '#475569'}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-400">Tamaño</label>
+                            <select
+                              value={child.data?.fontSize || '14px'}
+                              onChange={(e) => updateBoxChild(child.id, 'fontSize', e.target.value)}
+                              className="w-full bg-[#070b13] border border-slate-800 rounded px-2 py-1 text-xs text-slate-200"
+                            >
+                              <option value="12px">12px (Nota)</option>
+                              <option value="13px">13px (Compacto)</option>
+                              <option value="14px">14px (Estándar)</option>
+                              <option value="15px">15px (Grande)</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {child.type === 'button' && (
+                      <div className="space-y-2">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-medium text-slate-300">Texto del Botón</label>
+                          <input
+                            type="text"
+                            value={child.data?.text || ''}
+                            onChange={(e) => updateBoxChild(child.id, 'text', e.target.value)}
+                            placeholder="Texto del botón..."
+                            className="w-full bg-[#070b13] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-medium text-slate-300">Enlace (URL)</label>
+                          <input
+                            type="text"
+                            value={child.data?.url || ''}
+                            onChange={(e) => updateBoxChild(child.id, 'url', e.target.value)}
+                            placeholder="https://tudominio.com"
+                            className="w-full bg-[#070b13] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-400">Color Fondo</label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={child.data?.backgroundColor || '#2563eb'}
+                                onChange={(e) => updateBoxChild(child.id, 'backgroundColor', e.target.value)}
+                                className="w-6 h-6 rounded border border-slate-700 bg-transparent cursor-pointer"
+                              />
+                              <span className="text-[10px] font-mono text-slate-400">{child.data?.backgroundColor || '#2563eb'}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-400">Color Texto</label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={child.data?.textColor || '#ffffff'}
+                                onChange={(e) => updateBoxChild(child.id, 'textColor', e.target.value)}
+                                className="w-6 h-6 rounded border border-slate-700 bg-transparent cursor-pointer"
+                              />
+                              <span className="text-[10px] font-mono text-slate-400">{child.data?.textColor || '#ffffff'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

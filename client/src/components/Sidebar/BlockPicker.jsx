@@ -287,32 +287,34 @@ const BLOCK_TYPES = [
 
 export default function BlockPicker({ onAddBlock }) {
   return (
-    <div className="p-4 space-y-3">
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
-        Bloques de Contenido
+    <div className="p-3.5 space-y-3 select-none">
+      <div>
+        <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+          Modular Components
+        </h3>
+        <p className="text-[10px] text-slate-400 mt-0.5">
+          Add Content
+        </p>
       </div>
-      <div className="grid grid-cols-1 gap-2">
+
+      <div className="grid grid-cols-2 gap-2">
         {BLOCK_TYPES.map((item) => {
           const Icon = item.icon;
           return (
             <button
               key={item.type}
               onClick={() => onAddBlock(item.type, item.defaultData)}
-              className="flex items-start p-2.5 rounded-xl bg-slate-800/40 hover:bg-slate-800 border border-slate-800/80 hover:border-slate-700 text-left group transition-all duration-150 active:scale-[0.99]"
+              className="group relative flex flex-col items-center justify-center p-3 rounded-xl bg-[#121826] hover:bg-[#182133] border border-[#1e283d] hover:border-brand-500/50 transition-all duration-150 active:scale-95 shadow-sm"
+              title={item.description}
             >
-              <div className={`p-2 rounded-lg border ${item.color} mr-3 flex-shrink-0 transition-transform group-hover:scale-105`}>
-                <Icon className="w-4 h-4" />
+              <div className={`p-2.5 rounded-xl border ${item.color} mb-2 transition-transform group-hover:scale-110 flex items-center justify-center`}>
+                <Icon className="w-5 h-5" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-200 group-hover:text-white">
-                    {item.name}
-                  </span>
-                  <Plus className="w-3.5 h-3.5 text-slate-500 group-hover:text-brand-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-                <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                  {item.description}
-                </p>
+              <span className="text-[11px] font-bold text-slate-300 group-hover:text-white transition-colors text-center line-clamp-1">
+                {item.name}
+              </span>
+              <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Plus className="w-3 h-3 text-brand-400" />
               </div>
             </button>
           );

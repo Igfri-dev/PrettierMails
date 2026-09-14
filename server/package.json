@@ -2,6 +2,7 @@
   "name": "prettier-mails-server",
   "version": "1.0.0",
   "description": "Backend server for PrettierMails",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
