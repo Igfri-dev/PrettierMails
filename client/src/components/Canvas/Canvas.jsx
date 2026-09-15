@@ -1,4 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import BlockRenderer from './BlockRenderer.jsx';
 import { Plus, Sparkles, Smartphone, Monitor, LayoutTemplate } from 'lucide-react';
 
@@ -11,13 +24,64 @@ export default function Canvas({
   onDuplicateBlock,
   onMoveUp,
   onMoveDown,
+  onReorderBlocks,
   onAddBlock,
   globalSettings,
   previewMode,
+  concurrentEditorName,
   onOpenTemplates,
   onOpenAi,
 }) {
   const isMobile = previewMode === 'mobile';
+  const [dropTargetIndex, setDropTargetIndex] = useState(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // 5px movement needed so regular click/select isn't treated as drag
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = blocks.findIndex((b) => b.id === active.id);
+      const newIndex = blocks.findIndex((b) => b.id === over.id);
+      if (oldIndex !== -1 && newIndex !== -1 && typeof onReorderBlocks === 'function') {
+        onReorderBlocks(oldIndex, newIndex);
+      }
+    }
+  };
+
+  const handleDragOverSlot = (e, index) => {
+    if (
+      e.dataTransfer.types.includes('application/prettier-mails-block') ||
+      e.dataTransfer.types.includes('text/plain')
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'copy';
+      if (dropTargetIndex !== index) {
+        setDropTargetIndex(index);
+      }
+    }
+  };
+
+  const handleDropSlot = (e, index) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const blockType =
+      e.dataTransfer.getData('application/prettier-mails-block') ||
+      e.dataTransfer.getData('text/plain');
+    setDropTargetIndex(null);
+    if (blockType && typeof onAddBlock === 'function') {
+      onAddBlock(blockType, undefined, index);
+    }
+  };
 
   return (
     <div
@@ -40,6 +104,21 @@ export default function Canvas({
         )}
       </div>
 
+      {/* Collaborative Concurrency Alert Banner */}
+      {concurrentEditorName && (
+        <div className="mb-4 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs font-medium flex items-center justify-between shadow-lg max-w-xl animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center space-x-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span>
+            <span>
+              <strong>Edición activa concurrente:</strong> Esta plantilla está siendo editada por <strong>{concurrentEditorName}</strong>.
+            </span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/25 text-amber-300 font-bold ml-3 flex-shrink-0 uppercase tracking-wider">
+            En Edición
+          </span>
+        </div>
+      )}
+
       {/* Main Email Container Card */}
       <div
         onClick={(e) => e.stopPropagation()}
@@ -61,20 +140,40 @@ export default function Canvas({
 
         {/* Blocks container */}
         {blocks.length === 0 ? (
-          <div className="py-20 px-4 text-center space-y-5">
+          <div
+            onDragOver={(e) => {
+              if (
+                e.dataTransfer.types.includes('application/prettier-mails-block') ||
+                e.dataTransfer.types.includes('text/plain')
+              ) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                setDropTargetIndex(0);
+              }
+            }}
+            onDragLeave={() => setDropTargetIndex(null)}
+            onDrop={(e) => handleDropSlot(e, 0)}
+            className={`py-20 px-4 text-center space-y-5 rounded-2xl transition-all ${
+              dropTargetIndex === 0
+                ? 'border-2 border-dashed border-brand-500 bg-brand-50/60 scale-[0.99]'
+                : ''
+            }`}
+          >
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600/15 to-indigo-600/15 border border-brand-500/25 text-brand-500 flex items-center justify-center mx-auto shadow-sm">
               <Sparkles className="w-7 h-7" />
             </div>
             <div className="max-w-sm mx-auto">
-              <h3 className="text-lg font-bold text-slate-900">Lienzo en Blanco</h3>
+              <h3 className="text-lg font-bold text-slate-900">
+                {dropTargetIndex === 0 ? '¡Suelta aquí para añadir el bloque!' : 'Lienzo en Blanco'}
+              </h3>
               <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                Empieza agregando bloques desde el menú lateral, carga una plantilla predefinida o crea un correo con el Asistente de IA.
+                Arrastra componentes desde la barra lateral directamente al lienzo, haz clic sobre ellos, carga una plantilla o usa el Asistente de IA.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
               <button
                 type="button"
-                onClick={() => onAddBlock('heading', { content: '¡Hola! Bienvenido a PrettierMails' })}
+                onClick={() => onAddBlock('heading', { text: '¡Hola! Bienvenido a PrettierMails' })}
                 className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 shadow-sm transition-all hover:scale-105 active:scale-95"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -103,23 +202,76 @@ export default function Canvas({
             </div>
           </div>
         ) : (
-          <div className="space-y-1">
-            {blocks.map((block, index) => (
-              <BlockRenderer
-                key={block.id}
-                block={block}
-                isSelected={selectedBlockId === block.id}
-                onSelect={onSelectBlock}
-                onUpdateBlockData={onUpdateBlockData}
-                onDeleteBlock={onDeleteBlock}
-                onDuplicateBlock={onDuplicateBlock}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                canMoveUp={index > 0}
-                canMoveDown={index < blocks.length - 1}
-              />
-            ))}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={blocks.map((b) => b.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div
+                className="space-y-1 relative"
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget)) {
+                    setDropTargetIndex(null);
+                  }
+                }}
+              >
+                {/* Top drop slot before block 0 */}
+                <div
+                  onDragOver={(e) => handleDragOverSlot(e, 0)}
+                  onDrop={(e) => handleDropSlot(e, 0)}
+                  className={`transition-all duration-150 rounded-lg ${
+                    dropTargetIndex === 0
+                      ? 'py-2.5 my-1.5 bg-brand-500/10 border-2 border-dashed border-brand-500 flex items-center justify-center shadow-sm'
+                      : 'h-2 -my-1'
+                  }`}
+                >
+                  {dropTargetIndex === 0 && (
+                    <span className="text-[11px] font-bold text-brand-600 flex items-center gap-1">
+                      <Plus className="w-3.5 h-3.5" /> Soltar para insertar al inicio
+                    </span>
+                  )}
+                </div>
+
+                {blocks.map((block, index) => (
+                  <React.Fragment key={block.id}>
+                    <BlockRenderer
+                      block={block}
+                      isSelected={selectedBlockId === block.id}
+                      onSelect={onSelectBlock}
+                      onUpdateBlockData={onUpdateBlockData}
+                      onDeleteBlock={onDeleteBlock}
+                      onDuplicateBlock={onDuplicateBlock}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      canMoveUp={index > 0}
+                      canMoveDown={index < blocks.length - 1}
+                    />
+
+                    {/* Drop slot after block */}
+                    <div
+                      onDragOver={(e) => handleDragOverSlot(e, index + 1)}
+                      onDrop={(e) => handleDropSlot(e, index + 1)}
+                      className={`transition-all duration-150 rounded-lg ${
+                        dropTargetIndex === index + 1
+                          ? 'py-2.5 my-1.5 bg-brand-500/10 border-2 border-dashed border-brand-500 flex items-center justify-center shadow-sm'
+                          : 'h-2 -my-1'
+                      }`}
+                    >
+                      {dropTargetIndex === index + 1 && (
+                        <span className="text-[11px] font-bold text-brand-600 flex items-center gap-1">
+                          <Plus className="w-3.5 h-3.5" /> Soltar para insertar aquí
+                        </span>
+                      )}
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
 
         {/* Quick Add Block Bar at Bottom */}

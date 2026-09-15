@@ -1,4 +1,11 @@
 import nodemailer from 'nodemailer';
+import { validateSmtpHost, validateSmtpHostWithDns } from './utils/ssrfProtection.js';
+import { getSmtpAccountById } from './db/smtpRepository.js';
+import { recordAuditEvent } from './db/auditRepository.js';
+import { interpolateTemplate } from './utils/templateInterpolator.js';
+
+// Re-export SSRF validation functions for backward compatibility
+export { validateSmtpHost, validateSmtpHostWithDns };
 
 /**
  * Strips carriage returns, line feeds and control characters to prevent header injection (CRLF)
@@ -9,56 +16,10 @@ export function sanitizeHeader(value) {
 }
 
 /**
- * Validates that an SMTP host is not targeting private, localhost, or link-local/cloud metadata networks (SSRF defense)
- */
-export function validateSmtpHost(host) {
-  if (!host || typeof host !== 'string') {
-    throw new Error('Host SMTP inválido.');
-  }
-
-  const trimmed = host.trim().toLowerCase();
-
-  // Prohibit loopback, internal names, and metadata IP
-  const blockedPatterns = [
-    /^localhost$/,
-    /^127\./,
-    /^0\./,
-    /^::1$/,
-    /^0:0:0:0:0:0:0:1$/,
-    /^169\.254\./, // AWS / GCP / Azure Instance Metadata Service
-    /^10\./, // RFC 1918 Class A
-    /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // RFC 1918 Class B
-    /^192\.168\./, // RFC 1918 Class C
-    /^fc00:/, // IPv6 Unique Local
-    /^fe80:/, // IPv6 Link-Local
-    /\.local$/,
-    /\.internal$/,
-    /\.intranet$/,
-  ];
-
-  for (const pattern of blockedPatterns) {
-    if (pattern.test(trimmed)) {
-      throw new Error('Por razones de seguridad, no se permiten conexiones SMTP a hosts locales o de red privada (SSRF).');
-    }
-  }
-
-  // Validate hostname or domain structure
-  const hostnameRegex = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
-  const ipRegex = /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/;
-
-  if (!hostnameRegex.test(trimmed) && !ipRegex.test(trimmed)) {
-    throw new Error('El nombre de host SMTP debe ser un dominio válido (ej. smtp.gmail.com).');
-  }
-
-  return trimmed;
-}
-
-/**
  * Validates basic email address syntax
  */
 export function isValidEmail(email) {
   if (!email || typeof email !== 'string') return false;
-  // Maximum length check (RFC 5321 specifies 254 octets)
   if (email.length > 254) return false;
   return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/.test(email.trim());
 }
@@ -69,11 +30,11 @@ export function isValidEmail(email) {
 export function normalizeRecipients(recipients) {
   let list = [];
   if (Array.isArray(recipients)) {
-    list = recipients.map(r => String(r).trim()).filter(isValidEmail);
+    list = recipients.map((r) => String(r).trim()).filter(isValidEmail);
   } else if (typeof recipients === 'string') {
     list = recipients
       .split(/[\n,;]+/)
-      .map(r => r.trim())
+      .map((r) => r.trim())
       .filter(isValidEmail);
   }
 
@@ -89,9 +50,44 @@ export function normalizeRecipients(recipients) {
 }
 
 /**
- * Creates a Nodemailer transporter based on custom credentials, env vars, or test Ethereal account
+ * Creates a Nodemailer transporter based on custom credentials, saved workspace SMTP account, env vars, or test Ethereal account
  */
-export async function getTransporter(customConfig = null) {
+export async function getTransporter(customConfig = null, smtpAccount = null) {
+  // 1. If a saved database SMTP account is provided
+  if (smtpAccount) {
+    const validatedHost = validateSmtpHost(smtpAccount.host);
+    const portNum = Number(smtpAccount.port) || 587;
+    const isSecure = smtpAccount.secure ?? (portNum === 465);
+
+    if (portNum < 1 || portNum > 65535) {
+      throw new Error('Puerto SMTP inválido (debe estar entre 1 y 65535).');
+    }
+
+    const authConfig = smtpAccount.auth_user && smtpAccount.password ? {
+      user: sanitizeHeader(smtpAccount.auth_user),
+      pass: smtpAccount.password,
+    } : undefined;
+
+    return {
+      transporter: nodemailer.createTransport({
+        host: validatedHost,
+        port: portNum,
+        secure: isSecure,
+        ...(authConfig ? { auth: authConfig } : {}),
+        tls: {
+          minVersion: 'TLSv1.2',
+        },
+      }),
+      isTest: false,
+      fromDefault: smtpAccount.from_email
+        ? (smtpAccount.from_name
+          ? `"${sanitizeHeader(smtpAccount.from_name)}" <${sanitizeHeader(smtpAccount.from_email)}>`
+          : sanitizeHeader(smtpAccount.from_email))
+        : (smtpAccount.auth_user ? sanitizeHeader(smtpAccount.auth_user) : 'no-reply@prettiermails.com'),
+    };
+  }
+
+  // 2. If ad-hoc custom credentials are provided
   if (customConfig && customConfig.host && customConfig.user && customConfig.pass) {
     const validatedHost = validateSmtpHost(customConfig.host);
     const portNum = Number(customConfig.port) || 587;
@@ -118,7 +114,7 @@ export async function getTransporter(customConfig = null) {
     };
   }
 
-  // Check if environment variables are set
+  // 3. Check if environment variables are set
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
     const validatedHost = validateSmtpHost(process.env.SMTP_HOST);
     const portNum = Number(process.env.SMTP_PORT) || 587;
@@ -141,7 +137,23 @@ export async function getTransporter(customConfig = null) {
     };
   }
 
-  // Fallback: Create ephemeral Ethereal test account
+  // 4. Fallback: Create ephemeral Ethereal test account (or fast mock in test env)
+  if (process.env.NODE_ENV === 'test' && !process.env.USE_REAL_ETHEREAL) {
+    return {
+      transporter: {
+        verify: async () => true,
+        sendMail: async (mailOptions) => ({
+          messageId: `<mock-${Date.now()}@prettiermails.local>`,
+          response: '250 OK: Mock queued',
+          envelope: { from: mailOptions.from, to: mailOptions.to },
+        }),
+      },
+      isTest: true,
+      fromDefault: '"PrettierMails Test" <test@prettiermails.local>',
+      testAccount: { user: 'test@prettiermails.local' },
+    };
+  }
+
   const testAccount = await nodemailer.createTestAccount();
   const transporter = nodemailer.createTransport({
     host: 'smtp.ethereal.email',
@@ -162,11 +174,11 @@ export async function getTransporter(customConfig = null) {
 }
 
 /**
- * Verify custom SMTP credentials
+ * Verify custom SMTP credentials or saved account
  */
-export async function verifyConnection(config) {
+export async function verifyConnection(config, smtpAccount = null) {
   try {
-    const { transporter } = await getTransporter(config);
+    const { transporter } = await getTransporter(config, smtpAccount);
     await transporter.verify();
     return { success: true, message: 'Conexión SMTP exitosa.' };
   } catch (error) {
@@ -179,17 +191,45 @@ export async function verifyConnection(config) {
  */
 export async function sendEmail({
   recipients,
+  contacts = null,
   subject,
   html,
   fromName,
   replyTo,
   smtpConfig = null,
+  smtpAccountId = null,
+  workspaceId = null,
+  userId = null,
+  ipAddress = null,
   sendIndividually = true,
 }) {
-  const validRecipients = normalizeRecipients(recipients);
+  let contactList = [];
+  if (Array.isArray(contacts) && contacts.length > 0) {
+    contactList = contacts
+      .filter((c) => c && c.email && isValidEmail(c.email))
+      .map((c) => ({
+        ...c,
+        email: c.email.trim().toLowerCase(),
+      }));
+  } else if (recipients) {
+    const validRecipients = normalizeRecipients(recipients);
+    contactList = validRecipients.map((r) => ({ email: r }));
+  }
 
-  if (validRecipients.length === 0) {
-    throw new Error('No se especificaron correos destinatarios válidos.');
+  if (contactList.length === 0) {
+    throw new Error('No se especificaron destinatarios válidos.');
+  }
+
+  // Deduplicate by email
+  const seen = new Set();
+  contactList = contactList.filter((c) => {
+    if (seen.has(c.email)) return false;
+    seen.add(c.email);
+    return true;
+  });
+
+  if (contactList.length > 50) {
+    throw new Error('Límite de seguridad: máximo 50 destinatarios por envío.');
   }
 
   const cleanSubject = sanitizeHeader(subject);
@@ -201,25 +241,39 @@ export async function sendEmail({
     throw new Error('El contenido del correo (html) no puede estar vacío.');
   }
 
-  const { transporter, isTest, fromDefault } = await getTransporter(smtpConfig);
+  let resolvedAccount = null;
+  if (smtpAccountId && workspaceId) {
+    resolvedAccount = await getSmtpAccountById(smtpAccountId, workspaceId, { includeDecryptedPass: true });
+    if (!resolvedAccount) {
+      throw new Error('La cuenta SMTP seleccionada no existe en este espacio de trabajo.');
+    }
+  }
 
-  const cleanFromName = sanitizeHeader(fromName);
+  const { transporter, isTest, fromDefault } = await getTransporter(smtpConfig, resolvedAccount);
+
+  const cleanFromName = sanitizeHeader(fromName || (resolvedAccount?.from_name || ''));
   const cleanReplyTo = replyTo ? sanitizeHeader(replyTo) : null;
 
-  const senderAddress = cleanFromName 
+  const senderAddress = cleanFromName
     ? `"${cleanFromName}" <${fromDefault.includes('<') ? fromDefault.split('<')[1].replace('>', '') : fromDefault}>`
     : fromDefault;
 
-  // Individual sends to keep recipients private and track per-email status
+  let finalResult = null;
+
+  // Individual sends to keep recipients private, track per-email status, and apply personalization
   if (sendIndividually) {
     const results = [];
-    for (const recipient of validRecipients) {
+    for (const contact of contactList) {
+      const recipient = contact.email;
+      const personalizedSubject = interpolateTemplate(cleanSubject, contact, { escapeHtmlValues: false });
+      const personalizedHtml = interpolateTemplate(html, contact, { escapeHtmlValues: true });
+
       try {
         const mailOptions = {
           from: senderAddress,
           to: recipient,
-          subject: cleanSubject,
-          html,
+          subject: personalizedSubject,
+          html: personalizedHtml,
           ...(cleanReplyTo && isValidEmail(cleanReplyTo) ? { replyTo: cleanReplyTo } : {}),
         };
 
@@ -241,23 +295,24 @@ export async function sendEmail({
       }
     }
 
-    const successful = results.filter(r => r.status === 'sent');
-    const failed = results.filter(r => r.status === 'failed');
+    const successful = results.filter((r) => r.status === 'sent');
+    const failed = results.filter((r) => r.status === 'failed');
 
-    return {
+    finalResult = {
       success: successful.length > 0,
-      total: validRecipients.length,
+      total: contactList.length,
       sentCount: successful.length,
       failedCount: failed.length,
       isTest,
       results,
-      samplePreviewUrl: successful.find(r => r.previewUrl)?.previewUrl || null,
+      samplePreviewUrl: successful.find((r) => r.previewUrl)?.previewUrl || null,
     };
   } else {
     // Send as batch
+    const allEmails = contactList.map((c) => c.email);
     const mailOptions = {
       from: senderAddress,
-      to: validRecipients.join(', '),
+      to: allEmails.join(', '),
       subject: cleanSubject,
       html,
       ...(cleanReplyTo && isValidEmail(cleanReplyTo) ? { replyTo: cleanReplyTo } : {}),
@@ -266,14 +321,50 @@ export async function sendEmail({
     const info = await transporter.sendMail(mailOptions);
     const previewUrl = isTest ? nodemailer.getTestMessageUrl(info) : null;
 
-    return {
+    finalResult = {
       success: true,
-      total: validRecipients.length,
-      sentCount: validRecipients.length,
+      total: contactList.length,
+      sentCount: contactList.length,
       failedCount: 0,
       isTest,
       messageId: info.messageId,
       samplePreviewUrl: previewUrl,
     };
   }
+
+  // Audit logging if workspaceId is present
+  try {
+    const auditWorkspace = workspaceId || 'ws-default';
+    await recordAuditEvent({
+      workspaceId: auditWorkspace,
+      userId,
+      action: finalResult.success ? 'email.sent' : 'email.failed',
+      resourceType: 'email',
+      resourceId: finalResult.results?.[0]?.messageId || finalResult.messageId || null,
+      metadata: {
+        subject: cleanSubject,
+        totalRecipients: contactList.length,
+        sentCount: finalResult.sentCount,
+        failedCount: finalResult.failedCount,
+        isTest,
+        smtpAccountId: smtpAccountId || null,
+      },
+      ipAddress,
+    });
+  } catch (auditErr) {
+    console.warn('Aviso: no se pudo registrar log de auditoría para el envío:', auditErr.message);
+  }
+
+  return finalResult;
 }
+
+export default {
+  sanitizeHeader,
+  validateSmtpHost,
+  validateSmtpHostWithDns,
+  isValidEmail,
+  normalizeRecipients,
+  getTransporter,
+  verifyConnection,
+  sendEmail,
+};

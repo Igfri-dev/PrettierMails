@@ -1,50 +1,77 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Mail,
   Plus,
   Sparkles,
   LayoutDashboard,
   FileText,
-  Send,
-  Bell,
   Search,
-  MoreVertical,
   Edit3,
   Trash2,
   Copy,
   Eye,
   Video,
   Layers,
-  ArrowRight,
-  Clock,
-  CheckCircle2,
-  ExternalLink,
-  Shield,
-  User,
-  Settings,
-  Flame,
-  LayoutTemplate
+  LayoutTemplate,
+  Database,
+  Building2,
+  LogIn,
+  LogOut,
+  ChevronDown,
+  Server,
+  Users,
+  BarChart3,
+  Zap,
 } from 'lucide-react';
 import { TEMPLATES } from '../../utils/defaultTemplates.js';
 import { getSavedTemplates, deleteCustomTemplate } from '../../utils/templateStorage.js';
+import { listTemplates, getTemplate, deleteTemplate, duplicateTemplate } from '../../services/templateApi.js';
+import useAuthStore from '../../store/authStore.js';
 
 export default function Dashboard({
   onNewEmail,
   onOpenTemplate,
   onOpenAiModal,
   onPreviewTemplate,
+  onOpenAuthModal,
+  onOpenWorkspaceModal,
+  onOpenSmtpModal,
+  onOpenContactsModal,
+  onOpenCampaignsModal,
+  onOpenAutomationsModal,
 }) {
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'drafts' | 'templates' | 'sent'
   const [searchQuery, setSearchQuery] = useState('');
   const [savedDrafts, setSavedDrafts] = useState(() => getSavedTemplates());
+  const [dbTemplates, setDbTemplates] = useState([]);
 
-  // Merge built-in templates with user saved drafts
+  const { user, currentWorkspace, isAuthenticated, logout } = useAuthStore();
+
+  // Fetch templates from database whenever workspace changes
+  useEffect(() => {
+    let isMounted = true;
+    listTemplates()
+      .then((data) => {
+        if (isMounted && Array.isArray(data)) {
+          setDbTemplates(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('Conexión con repositorio de plantillas:', err.message);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [currentWorkspace?.id]);
+
+  // Merge built-in templates with user saved drafts and DB templates
   const allItems = useMemo(() => {
     const builtIns = TEMPLATES.map((tmpl) => ({
       id: tmpl.id,
       name: tmpl.name,
       subject: tmpl.subject || tmpl.name,
       type: 'template',
+      source: 'builtin',
       description: tmpl.description,
       updatedAt: 'Predefinida',
       blocks: tmpl.blocks,
@@ -54,22 +81,45 @@ export default function Dashboard({
       icon: tmpl.id === 'youtube-showcase' ? Video : LayoutTemplate,
     }));
 
-    const userDrafts = savedDrafts.map((draft) => ({
-      id: draft.id,
-      name: draft.name,
-      subject: draft.subject || 'Borrador sin título',
-      type: 'draft',
-      description: draft.description || 'Borrador guardado localmente',
-      updatedAt: draft.createdAt ? new Date(draft.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Reciente',
-      blocks: draft.blocks,
-      globalSettings: draft.globalSettings,
-      badge: 'Borrador',
-      badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-      icon: FileText,
+    const fromDb = dbTemplates.map((item) => ({
+      id: item.id,
+      name: item.name,
+      subject: item.subject || item.name,
+      type: 'template',
+      source: 'db',
+      description: item.description || 'Guardado en Base de Datos',
+      updatedAt: item.updated_at
+        ? new Date(item.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
+        : 'Reciente',
+      versionNumber: item.current_version || 1,
+      badge: `v${item.current_version || 1} • BD`,
+      badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+      icon: Database,
     }));
 
-    return [...userDrafts, ...builtIns];
-  }, [savedDrafts]);
+    // Filter local drafts that already exist in DB to prevent duplicates
+    const dbIds = new Set(dbTemplates.map((t) => t.id));
+    const userDrafts = savedDrafts
+      .filter((draft) => !dbIds.has(draft.id))
+      .map((draft) => ({
+        id: draft.id,
+        name: draft.name,
+        subject: draft.subject || 'Borrador sin título',
+        type: 'draft',
+        source: 'local',
+        description: draft.description || 'Borrador guardado localmente',
+        updatedAt: draft.createdAt
+          ? new Date(draft.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+          : 'Reciente',
+        blocks: draft.blocks,
+        globalSettings: draft.globalSettings,
+        badge: 'Borrador Local',
+        badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+        icon: FileText,
+      }));
+
+    return [...fromDb, ...userDrafts, ...builtIns];
+  }, [savedDrafts, dbTemplates]);
 
   // Filter items
   const filteredItems = useMemo(() => {
@@ -88,16 +138,50 @@ export default function Dashboard({
     });
   }, [allItems, activeTab, searchQuery]);
 
-  const handleDeleteDraft = (e, draftId) => {
+  const handleOpenItem = async (item) => {
+    if (item.source === 'db') {
+      try {
+        const full = await getTemplate(item.id);
+        if (full) {
+          onOpenTemplate(full);
+          return;
+        }
+      } catch (err) {
+        console.warn('Error al cargar plantilla desde base de datos:', err);
+      }
+    }
+    onOpenTemplate(item);
+  };
+
+  const handleDeleteItem = async (e, item) => {
     e.stopPropagation();
-    if (window.confirm('¿Deseas eliminar este borrador permanentemente?')) {
-      const updated = deleteCustomTemplate(draftId);
-      setSavedDrafts(updated);
+    if (window.confirm(`¿Deseas eliminar "${item.name}" permanentemente?`)) {
+      if (item.source === 'db') {
+        try {
+          await deleteTemplate(item.id);
+          setDbTemplates((prev) => prev.filter((t) => t.id !== item.id));
+        } catch (err) {
+          alert(`Error al eliminar plantilla: ${err.message}`);
+        }
+      } else {
+        const updated = deleteCustomTemplate(item.id);
+        setSavedDrafts(updated);
+      }
     }
   };
 
-  const handleDuplicateDraft = (e, item) => {
+  const handleDuplicateItem = async (e, item) => {
     e.stopPropagation();
+    if (item.source === 'db') {
+      try {
+        const duplicated = await duplicateTemplate(item.id, `${item.name} (Copia)`);
+        setDbTemplates((prev) => [duplicated, ...prev]);
+        onOpenTemplate(duplicated);
+        return;
+      } catch (err) {
+        console.warn('DB duplicate error, falling back to local copy:', err);
+      }
+    }
     const duplicated = {
       ...item,
       id: `copy-${Date.now()}`,
@@ -127,6 +211,30 @@ export default function Dashboard({
               </div>
               <p className="text-[10px] text-slate-400">Email Studio & Dispatcher</p>
             </div>
+          </div>
+
+          {/* Workspace Switcher in Sidebar */}
+          <div className="px-3 pt-3 pb-1">
+            <button
+              onClick={onOpenWorkspaceModal}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/40 transition group text-left"
+              title="Cambiar o gestionar espacio de trabajo"
+            >
+              <div className="flex items-center space-x-2.5 overflow-hidden">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-3.5 h-3.5" />
+                </div>
+                <div className="overflow-hidden">
+                  <p className="text-xs font-bold text-slate-200 truncate group-hover:text-white transition">
+                    {currentWorkspace?.name || 'Workspace Principal'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 capitalize">
+                    Rol: {currentWorkspace?.role || 'owner'}
+                  </p>
+                </div>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition flex-shrink-0" />
+            </button>
           </div>
 
           {/* Nav Links */}
@@ -184,23 +292,91 @@ export default function Dashboard({
               <Sparkles className="w-4 h-4 text-purple-400" />
               <span>Generar con IA</span>
             </button>
+
+            {onOpenSmtpModal && (
+              <button
+                type="button"
+                onClick={onOpenSmtpModal}
+                className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white hover:bg-indigo-950/30 transition border border-indigo-500/20"
+              >
+                <Server className="w-4 h-4 text-indigo-400" />
+                <span>Servidores SMTP</span>
+              </button>
+            )}
+
+            {onOpenContactsModal && (
+              <button
+                type="button"
+                onClick={onOpenContactsModal}
+                className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-emerald-300 hover:text-white hover:bg-emerald-950/30 transition border border-emerald-500/20"
+              >
+                <Users className="w-4 h-4 text-emerald-400" />
+                <span>Contactos y Listas</span>
+              </button>
+            )}
+
+            {onOpenCampaignsModal && (
+              <button
+                type="button"
+                onClick={onOpenCampaignsModal}
+                className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-blue-300 hover:text-white hover:bg-blue-950/30 transition border border-blue-500/20"
+              >
+                <BarChart3 className="w-4 h-4 text-blue-400" />
+                <span>Campañas y Analítica</span>
+              </button>
+            )}
+
+            {onOpenAutomationsModal && (
+              <button
+                type="button"
+                onClick={onOpenAutomationsModal}
+                className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-purple-300 hover:text-white hover:bg-purple-950/30 transition border border-purple-500/20"
+              >
+                <Zap className="w-4 h-4 text-purple-400" />
+                <span>Automatizaciones & Webhooks</span>
+              </button>
+            )}
           </nav>
         </div>
 
         {/* User profile bottom rail */}
         <div className="p-3 border-t border-[#1a2233]">
-          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center ring-2 ring-brand-500/30">
-                JD
+          {isAuthenticated ? (
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+              <div className="flex items-center space-x-2.5 overflow-hidden">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center ring-2 ring-brand-500/30 flex-shrink-0">
+                  {user?.name ? user.name.substring(0, 2).toUpperCase() : 'U'}
+                </div>
+                <div className="text-left overflow-hidden">
+                  <p className="text-xs font-semibold text-slate-200 leading-none truncate">{user?.name || 'Usuario'}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 truncate">{user?.email || ''}</p>
+                </div>
               </div>
-              <div className="text-left">
-                <p className="text-xs font-semibold text-slate-200 leading-none">John Doe</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">Plan Pro Activo</p>
-              </div>
+              <button
+                onClick={logout}
+                title="Cerrar sesión"
+                className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-          </div>
+          ) : (
+            <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></div>
+                  <span className="text-[11px] font-semibold text-slate-300">Modo Local / Invitado</span>
+                </div>
+              </div>
+              <button
+                onClick={onOpenAuthModal}
+                className="w-full flex items-center justify-center space-x-1.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold transition shadow"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Iniciar Sesión / Registro</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -227,6 +403,15 @@ export default function Dashboard({
           </div>
 
           <div className="flex items-center space-x-3">
+            <button
+              onClick={onOpenWorkspaceModal}
+              className="hidden sm:flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 transition"
+              title="Gestionar o cambiar espacio de trabajo"
+            >
+              <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="max-w-[140px] truncate">{currentWorkspace?.name || 'Workspace Principal'}</span>
+            </button>
+
             <button
               onClick={() => onOpenAiModal()}
               className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-500/20 border border-purple-400/30 transition flex items-center space-x-1.5 hover:scale-105 active:scale-95"
@@ -415,7 +600,7 @@ export default function Dashboard({
                       return (
                         <tr
                           key={item.id}
-                          onClick={() => onOpenTemplate(item)}
+                          onClick={() => handleOpenItem(item)}
                           className="hover:bg-slate-800/40 transition cursor-pointer group"
                         >
                           <td className="py-4 px-6">
@@ -444,7 +629,7 @@ export default function Dashboard({
                           <td className="py-4 px-6 text-right">
                             <div className="flex items-center justify-end space-x-1.5" onClick={(e) => e.stopPropagation()}>
                               <button
-                                onClick={() => onOpenTemplate(item)}
+                                onClick={() => handleOpenItem(item)}
                                 title="Editar en Studio"
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 transition"
                               >
@@ -458,16 +643,16 @@ export default function Dashboard({
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
                               <button
-                                onClick={(e) => handleDuplicateDraft(e, item)}
+                                onClick={(e) => handleDuplicateItem(e, item)}
                                 title="Duplicar"
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition"
                               >
                                 <Copy className="w-3.5 h-3.5" />
                               </button>
-                              {item.type === 'draft' && (
+                              {(item.source === 'db' || item.type === 'draft') && (
                                 <button
-                                  onClick={(e) => handleDeleteDraft(e, item.id)}
-                                  title="Eliminar borrador"
+                                  onClick={(e) => handleDeleteItem(e, item)}
+                                  title="Eliminar"
                                   className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />

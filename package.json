@@ -7,11 +7,21 @@
     "dev:server": "npm run dev --prefix server",
     "dev:client": "npm run dev --prefix client",
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
-    "build:client": "npm run build --prefix client"
+    "build": "npm run build --prefix client",
+    "build:client": "npm run build --prefix client",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "npm run db:migrate --prefix server",
+    "db:seed": "npm run db:seed --prefix server",
+    "lint": "npm run lint --prefix client",
+    "lint:fix": "npm run lint:fix --prefix client",
+    "format": "npm run format --prefix client",
+    "format:check": "npm run format:check --prefix client"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "puppeteer-core": "^25.10.0"
+    "puppeteer-core": "^25.10.0",
+    "vitest": "^5.0.0"
   },
   "keywords": [
     "email-builder",

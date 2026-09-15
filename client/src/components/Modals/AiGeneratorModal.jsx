@@ -41,8 +41,6 @@ export default function AiGeneratorModal({
   onClose,
   onApplyGeneratedEmail,
 }) {
-  if (!isOpen) return null;
-
   // Form State
   const [prompt, setPrompt] = useState('');
   const [videoInput, setVideoInput] = useState('');
@@ -51,34 +49,90 @@ export default function AiGeneratorModal({
   const [imageLinks, setImageLinks] = useState([]);
   const [additionalText, setAdditionalText] = useState('');
 
-  // Provider, Model and API Key
+  // Provider, Model and API Keys
   const [provider, setProvider] = useState('gemini');
   const [model, setModel] = useState('auto');
-  const [apiKey, setApiKey] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [rememberKey, setRememberKey] = useState(false);
   const [showKeySettings, setShowKeySettings] = useState(false);
+  const [serverAiConfig, setServerAiConfig] = useState({ serverHasGemini: false, serverHasOpenAi: false });
 
   // Loading & Error States
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Load saved API key from localStorage
+  // Check server AI config and load saved API keys from localStorage on mount
   useEffect(() => {
-    const savedKey = localStorage.getItem('prettier_mails_gemini_key');
-    if (savedKey) {
-      setApiKey(savedKey);
-    }
+    fetch('/api/ai-config-status')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success) {
+          setServerAiConfig(data);
+        }
+      })
+      .catch(() => {});
+
+    try {
+      const savedGemini = localStorage.getItem('prettier_mails_gemini_key') || '';
+      const savedOpenai = localStorage.getItem('prettier_mails_openai_key') || '';
+      if (savedGemini) {
+        setGeminiApiKey(savedGemini);
+        setRememberKey(true);
+      }
+      if (savedOpenai) {
+        setOpenaiApiKey(savedOpenai);
+        setRememberKey(true);
+      }
+    } catch (_) {}
   }, []);
 
-  // Save API key when updated
-  const handleKeyChange = (val) => {
-    setApiKey(val);
-    if (val.trim()) {
-      localStorage.setItem('prettier_mails_gemini_key', val.trim());
-    } else {
-      localStorage.removeItem('prettier_mails_gemini_key');
+  const hasActiveKey = provider === 'gemini'
+    ? Boolean(geminiApiKey.trim() || serverAiConfig.serverHasGemini)
+    : Boolean(openaiApiKey.trim() || serverAiConfig.serverHasOpenAi);
+
+  // Update Gemini API key
+  const handleGeminiKeyChange = (val) => {
+    setGeminiApiKey(val);
+    if (rememberKey) {
+      if (val.trim()) {
+        localStorage.setItem('prettier_mails_gemini_key', val.trim());
+      } else {
+        localStorage.removeItem('prettier_mails_gemini_key');
+      }
     }
   };
+
+  // Update OpenAI API key
+  const handleOpenaiKeyChange = (val) => {
+    setOpenaiApiKey(val);
+    if (rememberKey) {
+      if (val.trim()) {
+        localStorage.setItem('prettier_mails_openai_key', val.trim());
+      } else {
+        localStorage.removeItem('prettier_mails_openai_key');
+      }
+    }
+  };
+
+  // Toggle remember key on this device
+  const handleRememberToggle = (checked) => {
+    setRememberKey(checked);
+    if (checked) {
+      if (geminiApiKey.trim()) {
+        localStorage.setItem('prettier_mails_gemini_key', geminiApiKey.trim());
+      }
+      if (openaiApiKey.trim()) {
+        localStorage.setItem('prettier_mails_openai_key', openaiApiKey.trim());
+      }
+    } else {
+      localStorage.removeItem('prettier_mails_gemini_key');
+      localStorage.removeItem('prettier_mails_openai_key');
+    }
+  };
+
+  if (!isOpen) return null;
 
   // Add video link (supports multiple URLs separated by space, comma or newline)
   const handleAddVideo = (valToAdd) => {
@@ -153,6 +207,8 @@ export default function AiGeneratorModal({
     }, 1200);
 
     try {
+      const activeApiKey = (provider === 'gemini' ? geminiApiKey : openaiApiKey).trim();
+
       const response = await fetch('/api/generate-ai-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -161,7 +217,7 @@ export default function AiGeneratorModal({
           videoLinks: finalVideoLinks,
           imageLinks: finalImageLinks,
           additionalText,
-          apiKey: apiKey.trim() || undefined,
+          apiKey: activeApiKey || undefined,
           provider,
           model,
         }),
@@ -169,9 +225,23 @@ export default function AiGeneratorModal({
 
       clearInterval(stepInterval);
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      let data;
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        console.error('El servidor devolvió una respuesta no-JSON:', text);
+        throw new Error(
+          response.status === 404
+            ? 'Endpoint no encontrado (404). Verifica que el backend esté ejecutándose en http://localhost:3001.'
+            : response.status >= 500
+            ? `El servidor devolvió un error (${response.status}). Asegúrate de que el servidor backend de Node.js esté corriendo.`
+            : `El servidor no devolvió una respuesta JSON válida (HTTP ${response.status}).`
+        );
+      }
 
-      if (!response.ok || !data.success) {
+      if (!response.ok || data.success === false || !Array.isArray(data.blocks)) {
         throw new Error(data.error || 'Error al generar el correo con IA.');
       }
 
@@ -188,6 +258,8 @@ export default function AiGeneratorModal({
         subject: data.subject,
         globalSettings: data.globalSettings,
         blocks: data.blocks,
+        isFallback: data.isFallback,
+        generatedBy: data.generatedBy,
       });
 
       onClose();
@@ -231,6 +303,54 @@ export default function AiGeneratorModal({
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {/* Engine Status Banner */}
+          <div className={`p-3 rounded-xl border flex items-center justify-between text-xs transition ${
+            hasActiveKey 
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+          }`}>
+            <div className="flex items-center space-x-2.5">
+              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                hasActiveKey 
+                  ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]' 
+                  : 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]'
+              }`} />
+              <div>
+                <div className="font-bold flex items-center gap-1.5">
+                  {hasActiveKey ? (
+                    <>
+                      <span>IA en Vivo Activa ({provider === 'gemini' ? 'Google Gemini' : 'OpenAI'})</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-200 font-semibold">
+                        {(provider === 'gemini' ? geminiApiKey.trim() : openaiApiKey.trim()) ? 'Clave de Navegador' : 'Clave de Servidor'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Motor de Respaldo Local Activo</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-200 font-semibold">
+                        Modo Offline
+                      </span>
+                    </>
+                  )}
+                </div>
+                <p className="text-[11px] opacity-80 mt-0.5">
+                  {hasActiveKey
+                    ? 'Tus correos se diseñarán en tiempo real con modelos LLM inteligentes.'
+                    : 'Sin API Key activa. Se genera una plantilla estructurada offline. Para respuestas 100% dinámicas y únicas con IA real, configura tu clave.'}
+                </p>
+              </div>
+            </div>
+            {!hasActiveKey && (
+              <button
+                type="button"
+                onClick={() => setShowKeySettings(true)}
+                className="ml-3 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 font-semibold text-xs whitespace-nowrap transition cursor-pointer"
+              >
+                Configurar Clave
+              </button>
+            )}
+          </div>
+
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-center space-x-2 text-xs">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -445,25 +565,53 @@ export default function AiGeneratorModal({
                       className="bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
                     >
                       <option value="auto">Auto-detectar activo (Recomendado)</option>
-                      <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Rápido y Alta Disponibilidad)</option>
-                      <option value="gemini-3.6-flash">gemini-3.6-flash</option>
-                      <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
-                      <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+                      <option value="gemini-3.5-flash">Gemini 3.5 Flash (Alta Disponibilidad y Rápido)</option>
+                      <option value="gemini-3.6-flash">Gemini 3.6 Flash (Modelo Avanzado)</option>
+                      <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (Ultra Rápido)</option>
                     </select>
                   </div>
                 )}
 
-                <div className="space-y-1">
+                {provider === 'gemini' && serverAiConfig.serverHasGemini && (
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px]">
+                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>Clave de Gemini activa en el servidor (.env). Puedes dejar este campo vacío o ingresar una para sobrescribir.</span>
+                  </div>
+                )}
+
+                {provider === 'openai' && serverAiConfig.serverHasOpenAi && (
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px]">
+                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>Clave de OpenAI activa en el servidor (.env). Puedes dejar este campo vacío o ingresar una para sobrescribir.</span>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-[11px] font-medium text-slate-300">
+                    {provider === 'gemini' ? 'Clave de API de Google Gemini' : 'Clave de API de OpenAI'}
+                  </label>
                   <input
                     type="password"
-                    value={apiKey}
-                    onChange={(e) => handleKeyChange(e.target.value)}
-                    placeholder={provider === 'gemini' ? 'Pega tu clave AIzaSy...' : 'Pega tu clave sk-...'}
+                    value={provider === 'gemini' ? geminiApiKey : openaiApiKey}
+                    onChange={(e) => provider === 'gemini' ? handleGeminiKeyChange(e.target.value) : handleOpenaiKeyChange(e.target.value)}
+                    placeholder={
+                      provider === 'gemini'
+                        ? (serverAiConfig.serverHasGemini ? 'Usando clave del servidor (.env) o escribe una nueva...' : 'Pega tu clave AIzaSy...')
+                        : (serverAiConfig.serverHasOpenAi ? 'Usando clave del servidor (.env) o escribe una nueva...' : 'Pega tu clave sk-...')
+                    }
                     className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
                   />
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-                    <span>Se guarda de forma segura en tu navegador.</span>
-                    {provider === 'gemini' && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[11px] text-slate-400 pt-0.5">
+                    <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-200 transition">
+                      <input
+                        type="checkbox"
+                        checked={rememberKey}
+                        onChange={(e) => handleRememberToggle(e.target.checked)}
+                        className="rounded border-slate-700 bg-slate-800 text-brand-600 focus:ring-brand-500"
+                      />
+                      <span>Recordar clave en este dispositivo</span>
+                    </label>
+                    {provider === 'gemini' ? (
                       <a
                         href="https://aistudio.google.com/app/apikey"
                         target="_blank"
@@ -471,6 +619,16 @@ export default function AiGeneratorModal({
                         className="text-brand-400 hover:underline flex items-center gap-1"
                       >
                         <span>Obtener clave gratis en Google AI Studio</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <a
+                        href="https://platform.openai.com/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-brand-400 hover:underline flex items-center gap-1"
+                      >
+                        <span>Obtener clave en OpenAI</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     )}

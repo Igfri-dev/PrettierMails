@@ -258,18 +258,16 @@ async function getAvailableGeminiModel(geminiKey) {
 
       console.log('📋 Modelos de Gemini disponibles en la cuenta:', contentModels);
 
-      // Preferred priority for modern Google AI Studio keys
+      // Preferred priority for modern Google AI Studio keys (Google recommends gemini-3.6-flash)
       const priorities = [
-        'gemini-3.5-flash-lite',
         'gemini-3.6-flash',
-        'gemini-3.1-flash-lite',
         'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
         'gemini-3.7-flash',
         'gemini-3.8-flash',
         'gemini-flash-latest',
         'gemini-2.5-flash',
         'gemini-2.0-flash',
-        'gemini-1.5-flash-latest',
         'gemini-1.5-flash',
       ];
 
@@ -290,7 +288,7 @@ async function getAvailableGeminiModel(geminiKey) {
   }
 
   // Fallback default
-  return 'gemini-3.5-flash-lite';
+  return 'gemini-3.6-flash';
 }
 
 /**
@@ -336,20 +334,21 @@ async function generateWithGemini({ prompt, videoLinks, imageLinks, additionalTe
   if (model && model !== 'auto') {
     candidateModels = Array.from(new Set([
       model,
-      'gemini-3.5-flash-lite',
       'gemini-3.6-flash',
-      'gemini-3.1-flash-lite',
       'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
     ]));
   } else {
     const discovered = await getAvailableGeminiModel(geminiKey);
     candidateModels = Array.from(new Set([
       discovered,
-      'gemini-3.5-flash-lite',
       'gemini-3.6-flash',
-      'gemini-3.1-flash-lite',
       'gemini-3.5-flash',
-      'gemini-3.7-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
     ]));
   }
 
@@ -419,6 +418,7 @@ ${additionalText ? `
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const msg = errorData.error?.message || `HTTP ${response.status}`;
+        lastError = new Error(msg);
         // If 404, 429 (rate limit) or 503 (high demand), try next model in candidate list
         if ([404, 429, 500, 502, 503, 504].includes(response.status)) {
           continue;
@@ -441,6 +441,8 @@ ${additionalText ? `
       }
 
       const parsed = JSON.parse(cleaned);
+      parsed.isFallback = false;
+      parsed.generatedBy = `Google Gemini (${candidate})`;
       console.log(`✅ ¡Generación exitosa con Gemini (${candidate})!`);
       return parsed;
     } catch (err) {
@@ -503,7 +505,10 @@ ${additionalText ? `Textos, notas y contenido adicional:\n"""${additionalText}""
 
   const data = await response.json();
   const rawText = data.choices?.[0]?.message?.content;
-  return JSON.parse(rawText);
+  const parsed = JSON.parse(rawText);
+  parsed.isFallback = false;
+  parsed.generatedBy = 'OpenAI (GPT-4o mini)';
+  return parsed;
 }
 
 /**
@@ -511,7 +516,7 @@ ${additionalText ? `Textos, notas y contenido adicional:\n"""${additionalText}""
  */
 function generateSmartFallback({ prompt, videoLinks = [], imageLinks = [], additionalText = '' }) {
   const pLower = (prompt || '').toLowerCase();
-  const primaryVideo = videoLinks.find(v => v.includes('youtube.com') || v.includes('youtu.be')) || (pLower.includes('video') ? 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' : null);
+  const primaryVideo = videoLinks.find(v => v.includes('youtube.com') || v.includes('youtu.be')) || (pLower.includes('video') ? 'https://www.youtube.com/watch?v=M7lc1UVf-VE' : null);
   const primaryImage = imageLinks[0] || (pLower.includes('logo') || pLower.includes('empresa') || pLower.includes('institucional') ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80' : null);
 
   let subject = '✨ Bienvenida a nuestra institución';
@@ -656,7 +661,7 @@ function generateSmartFallback({ prompt, videoLinks = [], imageLinks = [], addit
           id: `ai-nested-txt-${Date.now()}-1`,
           type: 'text',
           data: {
-            content: 'Se ha creado tu casilla de correo oficial para comunicaciones internas del equipo:\n\n• **Correo electrónico:** usuario@novatech.io\n• **Estado:** Cuenta Activa',
+            content: 'Se ha creado tu casilla de correo oficial para comunicaciones internas del equipo:\n\n• **Correo electrónico:** {{corporate_email}}\n• **Estado:** Cuenta Activa',
             fontSize: '14px',
             fontWeight: '400',
             color: '#334155',
@@ -705,7 +710,7 @@ function generateSmartFallback({ prompt, videoLinks = [], imageLinks = [], addit
           id: `ai-nested-txt-${Date.now()}-2`,
           type: 'text',
           data: {
-            content: 'Para conectarte a la red inalámbrica dentro de nuestras oficinas:\n\n• **Nombre de Red (SSID):** NovaTech_Team\n• **Usuario:** usuario\n• **Contraseña:** password',
+            content: 'Para conectarte a la red inalámbrica dentro de nuestras oficinas:\n\n• **Nombre de Red (SSID):** NovaTech_Office\n• **Usuario:** {{network_user}}\n• **Contraseña:** {{wifi_password}}',
             fontSize: '14px',
             fontWeight: '400',
             color: '#334155',
@@ -793,6 +798,8 @@ function generateSmartFallback({ prompt, videoLinks = [], imageLinks = [], addit
       padding: '36px',
     },
     blocks: generatedBlocks,
+    isFallback: true,
+    generatedBy: 'local-fallback',
   };
 }
 
@@ -835,9 +842,12 @@ function sanitizeGeneratedEmail(result) {
   });
 
   return {
+    success: true,
     subject,
     globalSettings,
     blocks,
+    isFallback: Boolean(result.isFallback),
+    generatedBy: result.generatedBy || 'ai',
   };
 }
 
@@ -879,7 +889,7 @@ export async function generateEmailWithAi({
         model,
       });
     } catch (err) {
-      console.warn('⚠️ Modelos de Gemini remotos saturados temporalmente (503). Usando síntesis estructurada:', err.message);
+      console.warn('⚠️ Modelos de Gemini remotos con incidencia o no disponibles. Usando síntesis estructurada local:', err.message);
       result = generateSmartFallback({
         prompt,
         videoLinks: finalVideoLinks,
@@ -888,13 +898,23 @@ export async function generateEmailWithAi({
       });
     }
   } else if (provider === 'openai' && hasOpenAiKey) {
-    result = await generateWithOpenAi({
-      prompt,
-      videoLinks: finalVideoLinks,
-      imageLinks: finalImageLinks,
-      additionalText,
-      apiKey,
-    });
+    try {
+      result = await generateWithOpenAi({
+        prompt,
+        videoLinks: finalVideoLinks,
+        imageLinks: finalImageLinks,
+        additionalText,
+        apiKey,
+      });
+    } catch (err) {
+      console.warn('⚠️ Error en OpenAI API. Usando síntesis estructurada local:', err.message);
+      result = generateSmartFallback({
+        prompt,
+        videoLinks: finalVideoLinks,
+        imageLinks: finalImageLinks,
+        additionalText,
+      });
+    }
   } else {
     // Smart fallback synthesizer if no key is provided
     console.log('💡 Generando con motor de síntesis local de PrettierMails.');

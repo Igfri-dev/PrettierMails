@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   LayoutTemplate, 
@@ -9,11 +9,13 @@ import {
   Check, 
   AlertCircle, 
   FileCode, 
+  FileJson,
   ArrowRight,
   Clock,
   Layers,
   Sparkles,
-  Plus
+  Plus,
+  Database
 } from 'lucide-react';
 import YoutubeIcon from '../YoutubeIcon.jsx';
 import { TEMPLATES } from '../../utils/defaultTemplates.js';
@@ -23,6 +25,13 @@ import {
   downloadTemplateAsHtml, 
   parseTemplateFromHtml 
 } from '../../utils/templateStorage.js';
+import { 
+  listTemplates, 
+  getTemplate, 
+  deleteTemplate, 
+  exportTemplateJson, 
+  importTemplateJson 
+} from '../../services/templateApi.js';
 
 export default function TemplatesModal({
   isOpen,
@@ -35,48 +44,167 @@ export default function TemplatesModal({
   
   // Import tab state
   const [isDragging, setIsDragging] = useState(false);
-  const [importFile, setImportFile] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [importError, setImportError] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Load custom templates whenever modal opens
+  // Load custom templates (both DB and local) whenever modal opens
   useEffect(() => {
-    if (isOpen) {
-      const saved = getSavedTemplates();
-      setCustomTemplates(saved);
-      // If user has no saved templates yet, default to presets tab
-      if (saved.length === 0 && activeTab === 'custom') {
-        setActiveTab('presets');
-      }
-      setImportFile(null);
-      setImportResult(null);
-      setImportError(null);
-    }
+    if (!isOpen) return;
+
+    let isMounted = true;
+    const local = getSavedTemplates().map((t) => ({ ...t, source: 'local' }));
+
+    listTemplates()
+      .then((dbList) => {
+        if (!isMounted) return;
+        const dbItems = (dbList || []).map((t) => ({
+          id: t.id,
+          name: t.name,
+          subject: t.subject || t.name,
+          description: t.description,
+          createdAt: t.created_at,
+          versionNumber: t.current_version || 1,
+          source: 'db',
+        }));
+        const dbIds = new Set(dbItems.map((d) => d.id));
+        const combined = [...dbItems, ...local.filter((l) => !dbIds.has(l.id))];
+        setCustomTemplates(combined);
+        if (combined.length === 0) {
+          setActiveTab('presets');
+        }
+      })
+      .catch((err) => {
+        console.warn('Error al obtener plantillas:', err.message);
+        if (isMounted) {
+          setCustomTemplates(local);
+          if (local.length === 0) {
+            setActiveTab('presets');
+          }
+        }
+      });
+
+    setImportResult(null);
+    setImportError(null);
+
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleDeleteTemplate = (e, templateId) => {
+  const handleSelectCustomTemplate = async (tmpl) => {
+    if (tmpl.source === 'db' && (!tmpl.blocks || tmpl.blocks.length === 0)) {
+      try {
+        const full = await getTemplate(tmpl.id);
+        if (full) {
+          onSelectTemplate(full);
+          onClose();
+          return;
+        }
+      } catch (err) {
+        console.warn('Error al cargar plantilla desde base de datos:', err);
+      }
+    }
+    onSelectTemplate(tmpl);
+    onClose();
+  };
+
+  const handleDeleteTemplate = async (e, tmpl) => {
     e.stopPropagation();
-    if (window.confirm('¿Estás seguro de que deseas eliminar esta plantilla guardada?')) {
-      const updated = deleteCustomTemplate(templateId);
-      setCustomTemplates(updated);
+    if (window.confirm(`¿Estás seguro de que deseas eliminar "${tmpl.name}"?`)) {
+      if (tmpl.source === 'db') {
+        try {
+          await deleteTemplate(tmpl.id);
+          setCustomTemplates((prev) => prev.filter((t) => t.id !== tmpl.id));
+        } catch (err) {
+          alert(`Error al eliminar plantilla: ${err.message}`);
+        }
+      } else {
+        deleteCustomTemplate(tmpl.id);
+        setCustomTemplates((prev) => prev.filter((t) => t.id !== tmpl.id));
+      }
     }
   };
 
-  const handleDownloadTemplate = (e, tmpl) => {
+  const handleDownloadTemplate = async (e, tmpl) => {
     e.stopPropagation();
+    let templateToDownload = tmpl;
+    if (tmpl.source === 'db' && (!tmpl.blocks || tmpl.blocks.length === 0)) {
+      try {
+        const full = await getTemplate(tmpl.id);
+        if (full) templateToDownload = full;
+      } catch (err) {
+        console.warn('Error al obtener plantilla para descarga:', err);
+      }
+    }
     downloadTemplateAsHtml({
-      name: tmpl.name,
-      subject: tmpl.subject || tmpl.name,
-      globalSettings: tmpl.globalSettings,
-      blocks: tmpl.blocks,
+      name: templateToDownload.name,
+      subject: templateToDownload.subject || templateToDownload.name,
+      globalSettings: templateToDownload.globalSettings,
+      blocks: templateToDownload.blocks,
     });
+  };
+
+  const handleExportJson = async (e, tmpl) => {
+    e.stopPropagation();
+    try {
+      let exportData;
+      if (tmpl.source === 'db') {
+        exportData = await exportTemplateJson(tmpl.id);
+      } else {
+        exportData = {
+          schemaVersion: '1.0',
+          exportedAt: new Date().toISOString(),
+          generator: 'PrettierMails Enterprise Template Engine',
+          template: {
+            name: tmpl.name,
+            description: tmpl.description || '',
+            subject: tmpl.subject || '',
+            previewText: tmpl.previewText || '',
+            globalSettings: tmpl.globalSettings || {},
+            blocks: tmpl.blocks || [],
+          },
+        };
+      }
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${tmpl.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Error al exportar plantilla en formato JSON: ${err.message}`);
+    }
   };
 
   // Process imported text
   const processImportContent = (content, fileName) => {
+    const trimmed = (content || '').trim();
+    if (trimmed.startsWith('{') || (fileName && fileName.toLowerCase().endsWith('.json'))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const tmpl = parsed.template || parsed;
+        if (tmpl && Array.isArray(tmpl.blocks)) {
+          setImportResult({
+            name: tmpl.name || fileName.replace(/\.json$/i, ''),
+            subject: tmpl.subject || tmpl.name || '',
+            previewText: tmpl.previewText || tmpl.preview_text || '',
+            globalSettings: tmpl.globalSettings || tmpl.global_settings || {},
+            blocks: tmpl.blocks,
+            source: 'json',
+            fileName,
+          });
+          setImportError(null);
+          return;
+        }
+      } catch {
+        // Fall back to HTML parser
+      }
+    }
+
     const res = parseTemplateFromHtml(content);
     if (res.success) {
       setImportResult({
@@ -96,7 +224,6 @@ export default function TemplatesModal({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setImportFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = ev.target?.result;
@@ -127,7 +254,6 @@ export default function TemplatesModal({
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
 
-    setImportFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = ev.target?.result;
@@ -141,8 +267,15 @@ export default function TemplatesModal({
     reader.readAsText(file);
   };
 
-  const handleApplyImported = () => {
+  const handleApplyImported = async () => {
     if (importResult) {
+      if (importResult.source === 'json') {
+        try {
+          await importTemplateJson(importResult);
+        } catch (e) {
+          console.warn('Plantilla aplicada en interfaz pero no persistida en DB:', e.message);
+        }
+      }
       onSelectTemplate(importResult);
       onClose();
     }
@@ -252,16 +385,27 @@ export default function TemplatesModal({
                     <div
                       key={tmpl.id}
                       className="border border-slate-800 hover:border-brand-500/60 rounded-xl bg-slate-950/50 hover:bg-slate-800/30 p-5 flex flex-col justify-between transition-all group hover:shadow-xl hover:shadow-brand-500/5 cursor-pointer relative"
-                      onClick={() => {
-                        onSelectTemplate(tmpl);
-                        onClose();
-                      }}
+                      onClick={() => handleSelectCustomTemplate(tmpl)}
                     >
                       <div className="space-y-2">
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-bold text-slate-100 group-hover:text-brand-400 transition">
-                            {tmpl.name}
-                          </h4>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-bold text-slate-100 group-hover:text-brand-400 transition">
+                                {tmpl.name}
+                              </h4>
+                              {tmpl.source === 'db' ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                  <Database className="w-2.5 h-2.5" />
+                                  v{tmpl.versionNumber || 1}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  Local
+                                </span>
+                              )}
+                            </div>
+                          </div>
                           <div className="flex items-center space-x-1">
                             <button
                               onClick={(e) => handleDownloadTemplate(e, tmpl)}
@@ -271,7 +415,14 @@ export default function TemplatesModal({
                               <Download className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={(e) => handleDeleteTemplate(e, tmpl.id)}
+                              onClick={(e) => handleExportJson(e, tmpl)}
+                              title="Exportar archivo JSON enterprise"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition"
+                            >
+                              <FileJson className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteTemplate(e, tmpl)}
                               title="Eliminar plantilla"
                               className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
                             >
@@ -293,10 +444,12 @@ export default function TemplatesModal({
                         )}
 
                         <div className="flex items-center space-x-3 pt-2 text-[11px] text-slate-500">
-                          <span className="flex items-center gap-1">
-                            <Layers className="w-3 h-3 text-slate-400" />
-                            {tmpl.blocks?.length || 0} Bloques
-                          </span>
+                          {tmpl.blocks ? (
+                            <span className="flex items-center gap-1">
+                              <Layers className="w-3 h-3 text-slate-400" />
+                              {tmpl.blocks?.length || 0} Bloques
+                            </span>
+                          ) : null}
                           {tmpl.createdAt && (
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3 text-slate-400" />
@@ -458,7 +611,6 @@ export default function TemplatesModal({
                     <button
                       type="button"
                       onClick={() => {
-                        setImportFile(null);
                         setImportResult(null);
                       }}
                       className="px-3 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold hover:bg-slate-800 transition"

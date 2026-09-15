@@ -1,0 +1,46 @@
+services:
+  # MySQL 8.0 Database (Default Engine)
+  mysql:
+    image: mysql:8.0
+    container_name: prettier_mails_mysql
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: prettier_mails
+      MYSQL_USER: prettier
+      MYSQL_PASSWORD: secret123
+      MYSQL_ROOT_PASSWORD: rootsecret
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootsecret"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # PostgreSQL 16 Database (Switchable Engine via DB_ENGINE=postgresql)
+  postgres:
+    image: postgres:16-alpine
+    container_name: prettier_mails_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: prettier_mails
+      POSTGRES_USER: prettier
+      POSTGRES_PASSWORD: secret123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prettier -d prettier_mails"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  mysql_data:
+    name: prettier_mails_mysql_data
+  postgres_data:
+    name: prettier_mails_postgres_data

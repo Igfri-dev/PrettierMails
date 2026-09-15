@@ -1,6 +1,33 @@
 import juice from 'juice';
 
 /**
+ * Escapes HTML characters to prevent XSS / markup injection
+ */
+export function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+const COLOR_REGEX = /^(#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)|hsla?\(\s*\d+\s*,\s*\d+%\s*,\s*\d+%(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)|transparent|inherit|[a-zA-Z]+)$/;
+
+/**
+ * Sanitizes and validates CSS color strings, returning fallback if invalid
+ */
+export function sanitizeColor(color, fallback = '#f1f5f9') {
+  if (!color || typeof color !== 'string') return fallback;
+  const trimmed = color.trim();
+  if (COLOR_REGEX.test(trimmed)) {
+    return trimmed;
+  }
+  return fallback;
+}
+
+/**
  * Wraps inner email content with bulletproof email boilerplate, meta tags, and MSO resets.
  * Inlines CSS styles using juice for maximum compatibility across email clients.
  */
@@ -10,6 +37,10 @@ export function renderEmailHtml(contentHtml, options = {}) {
     previewText = '',
     backgroundColor = '#f1f5f9',
   } = options;
+
+  const safeTitle = escapeHtml(title);
+  const safePreviewText = escapeHtml(previewText);
+  const safeBgColor = sanitizeColor(backgroundColor, '#f1f5f9');
 
   // If already a full HTML document, inline styles directly
   if (contentHtml && (/<!DOCTYPE/i.test(contentHtml) || /<html/i.test(contentHtml))) {
@@ -28,13 +59,13 @@ export function renderEmailHtml(contentHtml, options = {}) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="x-apple-disable-message-reformatting" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <title>${title}</title>
+  <title>${safeTitle}</title>
   <style type="text/css">
     /* Reset styles */
     body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
     img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
-    body { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; background-color: ${backgroundColor}; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; background-color: ${safeBgColor}; }
     
     /* iOS Blue Links */
     a[x-apple-data-detectors] {
@@ -67,17 +98,17 @@ export function renderEmailHtml(contentHtml, options = {}) {
     }
   </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: ${backgroundColor}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  ${previewText ? `
+<body style="margin: 0; padding: 0; background-color: ${safeBgColor}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  ${safePreviewText ? `
     <!-- Hidden preheader text preview -->
-    <div style="display: none; font-size: 1px; color: ${backgroundColor}; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
-      ${previewText}
+    <div style="display: none; font-size: 1px; color: ${safeBgColor}; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
+      ${safePreviewText}
       &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
     </div>
   ` : ''}
 
   <!-- Main outer container table -->
-  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: ${backgroundColor}; table-layout: fixed;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: ${safeBgColor}; table-layout: fixed;">
     <tr>
       <td align="center" style="padding: 24px 12px;">
         <!-- Email Content wrapper -->
