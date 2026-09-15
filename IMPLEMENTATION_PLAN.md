@@ -1,92 +1,37 @@
 # 📋 Plan de Implementación Maestro: PrettierMails Enterprise Suite
 
-Este documento contiene el diagnóstico integral, análisis técnico, arquitectura objetivo y la hoja de ruta en 9 fases para transformar **PrettierMails** en una plataforma profesional, segura, multi-usuario y multi-motor (**MySQL** por defecto / **PostgreSQL** conmutable).
+Este documento contiene el diagnóstico integral, análisis técnico, arquitectura ejecutada y el estado de avance de las fases de desarrollo de **PrettierMails Enterprise Suite**.
 
 ---
 
-## 1. Arquitectura Actual
+## 1. Arquitectura del Sistema
 
-El proyecto actual es un MVP funcional con una base sólida pero con componentes monolíticos y almacenamiento cliente:
+PrettierMails cuenta con una arquitectura desacoplada y modular con soporte para desarrollo local con **MySQL en XAMPP**, conmutabilidad a **PostgreSQL** y tolerancia a fallos mediante mock relacional en memoria:
 
 - **Frontend (`client/`)**:
   - React 18 + Vite 6 + Tailwind CSS 3.4.
   - Navegación de dos vistas (`Dashboard` y `Studio Editor`) en `App.jsx`.
-  - 11 tipos de bloques modulares (`heading`, `text`, `image`, `button`, `youtube`, `box`, `divider`, `spacer`, `social`, `grid`, `table`).
-  - Monolitos: `StyleInspector.jsx` (1611 líneas), `BlockRenderer.jsx` (704 líneas) y `BlockPicker.jsx` (326 líneas).
-  - Compilación HTML para correo en `emailCompiler.js` (716 líneas).
-  - Almacenamiento exclusivamente local en `localStorage` (`templateStorage.js`) y descarga de archivos `.html` con metadatos JSON.
+  - **Block Registry Modular** (`client/src/blocks/`): 11 tipos de bloques modulares (`heading`, `text`, `image`, `button`, `youtube`, `box` con hijos editables, `divider`, `spacer`, `social`, `grid` de 2 columnas y `table` cebra).
+  - Almacenes globales con **Zustand** (`documentStore.js` con Undo/Redo de hasta 50 snapshots, `authStore.js` para autenticación y workspaces).
+  - Reordenamiento visual mediante **Drag & Drop** (`@dnd-kit`).
+  - Compiladores duales: compilador MJML reactivo (`mjmlCompiler.js`) y compilador de tablas anidadas con Juice inlining (`emailCompiler.js`).
+  - Motor de interpolación de variables dinámicas (`templateInterpolator.js`).
+  - Modales empresariales oscuros: Login/Registro (`AuthModal`), Espacios de trabajo (`WorkspaceModal`), Historial de Versiones (`VersionHistoryModal`), Cuentas SMTP con cifrado (`SmtpAccountsModal`), Contactos y CSV (`ContactsModal`), Campañas y Analítica (`CampaignsModal`), Automatizaciones y Webhooks (`AutomationsModal`), Asistente de IA (`AiGeneratorModal`).
+
 - **Backend (`server/`)**:
-  - Express 4.21 en un único archivo `index.js` (216 líneas) con CORS y `express-rate-limit`.
-  - Despacho Nodemailer en `emailService.js` (Ethereal Email y SMTP personalizado con validación regex básica).
-  - Inlining CSS con Juice en `htmlRenderer.js`.
-  - Orquestador de IA en `aiService.js` (Google Gemini, OpenAI y fallback inteligente).
-  - Sin persistencia en base de datos, sin sesiones/usuarios, sin colas de envío en segundo plano.
+  - Express 4.21 con arquitectura modular por rutas y repositorios relacionales.
+  - Base de datos relacional híbrida (**MySQL en XAMPP** / PostgreSQL / Memory) con 19 tablas y migraciones DDL automáticas (`migrations.js`).
+  - Cifrado autenticado **AES-256-GCM** con vector IV para contraseñas SMTP (`encryption.js`).
+  - Autenticación JWT con hashing criptográfico (`crypto.scrypt`).
+  - Cola de despacho masivo asíncrono con control de concurrencia y reintentos (`campaignQueue.js`).
+  - Motor de seguimiento analítico en tiempo real: píxel invisible de 1x1 (`/api/track/open`) y redirección de clics (`/api/track/click`).
+  - Motor de Webhooks con firma criptográfica **HMAC-SHA256** en cabecera `X-PrettierMails-Signature`.
+  - Orquestador de IA multimodelo con soporte para **Google Gemini 3.6 Flash / 3.5 Flash**, OpenAI GPT-4o mini y motor sintético estructurado offline como fallback tolerante a fallos (`aiService.js`).
+  - Seguridad operacional: protección anti-SSRF (`ssrfProtection.js`), bloqueo concurrente de plantillas (`template_locks`), bitácora inmutable de auditoría (`audit_logs`) y rate limiters dedicados.
 
 ---
 
-## 2. Problemas Críticos Encontrados
-
-1. **Violación de Rules of Hooks en Modales**:
-   - `AiGeneratorModal.jsx` (línea 44) y `SendEmailModal.jsx` (línea 25) ejecutan `if (!isOpen) return null;` **antes** de inicializar `useState` y otros hooks. Cuando el modal se abre o cierra, cambia el número y orden de hooks invocados, provocando advertencias o comportamientos indefinidos en React.
-2. **Monolito de Bloques sin Registro Modular**:
-   - Para añadir, modificar o validar un bloque se requiere editar manualmente 4 archivos gigantescos (`BlockPicker`, `BlockRenderer`, `StyleInspector`, `emailCompiler`), dificultando enormemente la mantenibilidad y la adición de nuevos bloques.
-3. **Inyección en Serialización de Metadata HTML**:
-   - En `emailCompiler.js`, el bloque `<script type="application/json" id="prettier-mails-template-data">` se construye interpolando `JSON.stringify` sin escapar secuencias peligrosas como `</script>` o `-->`, exponiendo al usuario a posibles fugas o inyecciones al abrir el archivo en navegadores o webmails.
-4. **HTML Renderer Inseguro en Backend**:
-   - En `server/src/htmlRenderer.js`, variables como `${title}` y `${previewText}` se interpolan directamente sin escapar caracteres especiales mediante `escapeHtml`, y `${backgroundColor}` se inserta en atributos HTML y CSS sin validación estricta de color.
-5. **SSRF con Riesgo de DNS Rebinding en SMTP**:
-   - En `server/src/emailService.js`, la validación de hosts SMTP se limita a una lista negra de patrones de texto (ej. `localhost`, `127.`), pero no resuelve la IP del dominio en DNS antes de conectar, permitiendo que dominios que resuelvan a `127.0.0.1` o IPs internas de metadatos de nube evadan la protección.
-6. **Manejo de Errores y Datos Falsos en IA**:
-   - En `server/src/aiService.js`, `throw lastError;` puede fallar si `lastError` es nulo. Además, el fallback local inserta credenciales y contraseñas simuladas (`usuario@novatech.io`, contraseñas y enlaces a Rick Astley) en lugar de etiquetas y placeholders evidentes (`{{corporate_email}}`, `{{temporary_password}}`).
-7. **Ausencia de Schemas Formales de Validación**:
-   - No se utiliza Zod. Las estructuras de documentos de correo, datos de bloques y configuraciones se reciben y procesan sin validación de tipos, tamaños o valores permitidos.
-8. **Endpoints de Envío e IA Expuestos sin Autenticación**:
-   - `/api/send-email` y `/api/generate-ai-email` carecen de autenticación, control de usuarios, cuotas y roles.
-9. **Volatilidad de Datos en LocalStorage**:
-   - Si el usuario borra la caché del navegador o ingresa desde otro dispositivo, pierde todas sus plantillas guardadas.
-
----
-
-## 3. Arquitectura Objetivo
-
-```text
-PrettierMails Architecture
-│
-├── Frontend (React 18 + Vite + Tailwind + Zod + dnd-kit)
-│   ├── Block Registry (client/src/blocks/<type>/...)
-│   │   ├── schema.js (Validación Zod por bloque)
-│   │   ├── defaults.js (Datos por defecto)
-│   │   ├── Inspector.jsx (Editor visual del bloque)
-│   │   ├── Preview.jsx (Renderizado en canvas)
-│   │   ├── compile.js (Compilación a tablas de correo)
-│   │   └── index.js (Definición tipada)
-│   ├── State Engine (useReducer con Undo/Redo, Autosave debounced)
-│   ├── Personalization (Variables {{first_name}}, {{custom.field}} con fallbacks)
-│   └── Views (Dashboard, Studio, Campañas, Contactos, Ajustes SMTP, Workspaces)
-│
-├── Backend Modular (Express / Node.js)
-│   ├── Security Middleware (Helmet, CORS seguro, Rate Limiting distribuido)
-│   ├── Auth & RBAC (Argon2id/bcrypt, cookies HttpOnly, Roles: owner, admin, editor, viewer)
-│   ├── Workspace Isolation (workspace_id forzado en cada consulta)
-│   ├── Compiler & Preflight (Juice inlining, CSS strict validator, Safe metadata serializer)
-│   └── AI Providers (Gemini Free Tier & OpenAI GPT-4o con interfaces unificadas y Zod parser)
-│
-├── Dual Database Engine (MySQL predeterminado / PostgreSQL)
-│   ├── DB_ENGINE=mysql | postgresql
-│   ├── Capa unificada con Drizzle ORM (o Prisma multi-driver)
-│   ├── Migraciones y semillas (npm run db:migrate, npm run db:seed)
-│   └── Modelos: users, workspaces, members, templates, versions, contacts, campaigns, logs
-│
-└── Workers y Colas Asíncronas (BullMQ + Redis)
-    ├── Campaign Dispatcher (1 recipient = 1 distinct job)
-    ├── Throttling y rate limits por cuenta SMTP (ej. 100 emails/min)
-    ├── Deliverability & Suppression (Unsubscribe tokens, bounce handling, preflight check)
-    └── Generador de miniaturas en background
-```
-
----
-
-## 4. Fases de Implementación
+## 2. Estado de Implementación por Fases
 
 ### Fase 1: Estabilización, Corrección de Hooks, Schemas Zod y Seguridad Base ✅ COMPLETADA
 - [x] Corregir violaciones de Rules of Hooks en `AiGeneratorModal.jsx` y `SendEmailModal.jsx`.
@@ -110,7 +55,7 @@ PrettierMails Architecture
 
 ### Fase 3: Capa de Base de Datos Dual (MySQL por Defecto / PostgreSQL), Persistencia y Versionado ✅ COMPLETADA
 - [x] Capa de conexión agnóstica (`server/src/db/connection.js`) conmutable vía `DB_ENGINE` (`mysql` por defecto, `postgresql` conmutable) y mock relacional en memoria para desarrollo ágil y CI.
-- [x] Migraciones DDL universales (`server/src/db/migrations.js`) para 7 tablas: `workspaces`, `users`, `workspace_members`, `templates`, `template_versions`, `smtp_accounts`, `audit_logs`.
+- [x] Migraciones DDL universales (`server/src/db/migrations.js`) para 7 tablas iniciales: `workspaces`, `users`, `workspace_members`, `templates`, `template_versions`, `smtp_accounts`, `audit_logs`.
 - [x] Seeders idempotentes (`server/src/db/seeders.js`) con workspace por defecto (`ws-default`), usuario admin y plantillas predefinidas v1.
 - [x] Repositorio de plantillas y versionado inmutable (`server/src/db/templateRepository.js`): CRUD, incremento secuencial de versiones, resumen de diff, restauración y duplicación.
 - [x] API REST completa (`server/src/routes/templates.js`): endpoints `/api/templates`, `/autosave`, `/:id/versions`, `/:id/versions/:versionId/restore`, `/:id/duplicate`.
@@ -118,7 +63,6 @@ PrettierMails Architecture
 - [x] Modal de Historial de Versiones (`VersionHistoryModal.jsx`) con inspección de checkpoints y restauración en 1 clic.
 - [x] Integración en `Dashboard.jsx` y `TemplatesModal.jsx` con soporte unificado de base de datos (`vX • BD`), borradores locales y plantillas oficiales.
 - [x] Scripts CLI: `npm run db:migrate`, `npm run db:seed`, `docker-compose.yml`, `.env.example`.
-- [x] 68 pruebas automatizadas pasando al 100% en Vitest across 10 test suites, ESLint limpio con 0 errores y build de Vite exitoso.
 
 ### Fase 4: Autenticación, Roles (RBAC), Workspaces y Multi-tenancy ✅ COMPLETADA
 - [x] Sesiones seguras con JWT / HMAC-SHA256 y hashing criptográfico de contraseñas (`crypto.scrypt` con salt de 16 bytes).
@@ -129,67 +73,79 @@ PrettierMails Architecture
 - [x] Store de autenticación en Zustand (`authStore.js`) con persistencia en `localStorage`.
 - [x] Modales oscuros Pro: Login/Registro (`AuthModal.jsx`) y Espacios de Trabajo / Invitación de Miembros (`WorkspaceModal.jsx`).
 - [x] Conmutador de workspaces en `Navbar.jsx` y `Dashboard.jsx`.
-- [x] 78 pruebas automatizadas pasando al 100% across 13 suites, ESLint limpio con 0 errores y build de Vite exitoso en 4.84s.
 
 ### Fase 5: Sistema de Envíos, Gestión de Cuentas SMTP Múltiples, Cifrado AES-256-GCM y Auditoría ✅ COMPLETADA
 - [x] Cifrado autenticado de contraseñas SMTP con **AES-256-GCM** y clave derivada con SHA-256 (`server/src/utils/encryption.js`).
 - [x] Protección avanzada contra SSRF con comprobación de CIDRs privados y resolución DNS (`server/src/utils/ssrfProtection.js`).
-- [x] Repositorio de cuentas SMTP (`server/src/db/smtpRepository.js`) con aislamiento por workspace, gestión de cuenta predeterminada y ocultamiento de claves en listados.
+- [x] Repositorio de cuentas SMTP (`server/src/db/smtpRepository.js`) con aislamiento por workspace, gestión de cuenta predeterminada y ocultamiento de claves en listados (`••••••••`).
 - [x] Repositorio de auditoría (`server/src/db/auditRepository.js`) para trazabilidad de eventos operativos.
 - [x] Endpoints REST `/api/smtp-accounts` y `/api/audit-logs` protegidos por roles RBAC.
 - [x] Servicio de despacho (`emailService.js`) conectado a cuentas SMTP guardadas y logging de auditoría.
 - [x] Modal de gestión de cuentas SMTP (`SmtpAccountsModal.jsx`) con presets (Gmail, Outlook 365, Amazon SES, Brevo, Custom), prueba de conexión en tiempo real y vista de logs de auditoría.
 - [x] Selector de remitente en `SendEmailModal.jsx` con soporte para cuentas del workspace.
-- [x] 103 pruebas automatizadas pasando al 100% across 18 suites, ESLint limpio con 0 errores y build de Vite exitoso en 5.32s.
 
-### Fase 6: Contactos, Listas y Variables de Personalización (SIGUIENTE PASO)
-- [ ] Tablas relacionales: `contacts`, `contact_lists`, `contact_list_members`.
-- [ ] Motor de variables de personalización: `{{first_name}}`, `{{last_name}}`, `{{email}}`, `{{custom.field}}` con soporte de fallback `{{first_name|Estimado usuario}}`.
-- [ ] Importador inteligente de archivos CSV / XLSX con detección de cabeceras, mapeo y deduplicación.
-- [ ] Selector de vista previa "Previsualizar como [Contacto]" en el editor.
-- [ ] Modal de gestión de contactos y audiencias.
+### Fase 6: Contactos, Listas y Variables de Personalización ✅ COMPLETADA
+- [x] Tablas relacionales migradas: `contacts`, `contact_lists`, `contact_list_members`.
+- [x] Repositorio de contactos (`contactRepository.js`) con CRUD, filtrado y conteo de miembros.
+- [x] Motor de variables de personalización (`templateInterpolator.js`): `{{first_name}}`, `{{last_name}}`, `{{email}}`, `{{company}}` y fallback `{{campo|Valor alternativo}}`.
+- [x] Importador inteligente de archivos CSV (`csvImporter.js`) con detección de cabeceras, mapeo y deduplicación.
+- [x] Endpoints REST `/api/contacts` y `/api/contacts/import-csv` con validación Zod.
+- [x] Modal de gestión de audiencias (`ContactsModal.jsx`): administración de listas, subida de archivos CSV con drag-and-drop y creación manual de contactos.
 
-### Fase 7: Entregabilidad, Salud de Correo (Preflight) y Cumplimiento
-- Generación automática de versión en texto plano (`text/plain` multipart/alternative).
-- Enlace y tokens seguros de desuscripción (`/unsubscribe/:token`), cabeceras `List-Unsubscribe`.
-- Lista de supresión (`suppression_list`) verificada antes de cualquier despacho.
-- Protección SSRF avanzada con resolución DNS previa al socket SMTP.
-- Herramienta Email Preflight Health Check (puntuación 0-100, alertas de contraste, peso HTML > 100 KB, etc.).
+### Fase 7: Campañas Masivas, Cola de Despacho y Tracking de Aperturas/Clics ✅ COMPLETADA
+- [x] Tablas relacionales: `campaigns`, `campaign_logs`, `campaign_events`.
+- [x] Repositorio de campañas (`campaignRepository.js`) con estadísticas agregadas (enviados, entregados, abiertos, clics).
+- [x] Cola de despacho asíncrona (`campaignQueue.js`) con control de estado (`draft`, `queued`, `sending`, `paused`, `completed`).
+- [x] Píxel de seguimiento de aperturas transparente 1x1 GIF (`/api/track/open/:dispatchId`).
+- [x] Redirección y auditoría de clics en enlaces (`/api/track/click/:dispatchId`) con registro de User-Agent e IP.
+- [x] Endpoints REST `/api/campaigns` (CRUD, start, pause, resume, stats).
+- [x] Modal de gestión de campañas (`CampaignsModal.jsx`) con analítica visual en tiempo real.
 
-### Fase 8: Bloques Avanzados, Biblioteca de Medios y Preview Profesional
-- Nuevos bloques: `quote`, `pricing`, `product`, `feature-list`, `badge`, `footer`, `legal-text`, `unsubscribe`.
-- Biblioteca de medios (assets) para subir, reusar y clasificar imágenes con abstracción para almacenamiento local y S3.
-- Perfiles de previsualización avanzados (Gmail, Outlook Desktop, Dark Mode, simulación de bloqueo de imágenes).
-- Carpetas, etiquetas y favoritos en el Dashboard.
+### Fase 8: Automatizaciones Visuales, Webhooks con HMAC y Bloqueo Concurrente ✅ COMPLETADA
+- [x] Tablas relacionales: `automations`, `automation_steps`, `automation_logs`, `webhooks`, `webhook_deliveries`, `template_locks`.
+- [x] Motor de automatizaciones de marketing (`automationRepository.js`, `/api/automations`) con disparadores por eventos (`contact_added`) y pasos con retardo (delays).
+- [x] Motor de webhooks salientes (`webhookEngine.js`, `/api/webhooks`) con firma de seguridad criptográfica **HMAC-SHA256** en cabecera `X-PrettierMails-Signature` y reintentos automáticos.
+- [x] Sistema de bloqueo concurrente de plantillas (`lockRepository.js`, `/api/templates/:id/lock`) para evitar sobreescritura accidental entre usuarios del mismo workspace.
+- [x] Compilador reactivo dual MJML (`mjmlCompiler.js`) para maquetación de alto nivel.
+- [x] Modal integrado de Automatizaciones y Webhooks (`AutomationsModal.jsx`).
 
-### Fase 9: Producción, CI/CD Dual (MySQL + PostgreSQL) y Documentación
-- Matriz de GitHub Actions ejecutando tests simultáneamente contra MySQL y PostgreSQL.
-- Seguridad en producción con Helmet, CSP y rate limiting distribuido.
-- Logging estructurado con Pino (ofuscación de contraseñas y API keys).
-- Health checks `/api/health`, `/api/health/live`, `/api/health/ready`.
-- Scripts de backup (`npm run db:backup`) con soporte para `mysqldump` y `pg_dump`.
-- Actualización final de `README.md` (MySQL como opción por defecto), `docs/MIGRATION.md` y `.env.example`.
-
----
-
-## 5. Estrategia de Backward Compatibility (Compatibilidad Hacia Atrás)
-
-- **Versionado de Documentos**: Las plantillas exportadas o guardadas llevarán `prettierMailsVersion: "2.0"`.
-- **Migrador en Vuelo**: El parser de plantillas detectará documentos legacy v1.0 y los migrará automáticamente a la estructura actual sin pérdida de datos.
-- **Roundtrip HTML**: Se mantendrán intactas las reglas de parseo de archivos `.html` descargados previamente.
-- **Plantillas Predefinidas**: Ninguna plantilla predeterminada existente será eliminada o alterada en su diseño visual.
+### Fase 9: Asistente IA de Última Generación, Soporte XAMPP y Documentación Real ✅ COMPLETADA
+- [x] Integración de modelos oficiales de última generación: **Google Gemini 3.6 Flash** (`gemini-3.6-flash`), `gemini-3.5-flash` y `gemini-3.5-flash-lite`.
+- [x] Indicador visual dinámico de estado en el modal de IA (`🟢 IA en Vivo Activa` vs `🟡 Motor de Respaldo Local`).
+- [x] Endpoint de estado `/api/ai-config-status` para detección no intrusiva de credenciales en el servidor.
+- [x] Soporte nativo para MySQL en XAMPP (`localhost:3306`, base de datos `prettier_mails`, 19 tablas relacionales migradas automáticamente).
+- [x] Suite de 156 pruebas automatizadas en Vitest pasando al 100% across 33 suites.
+- [x] Capturas de pantalla reales en alta resolución y GIF animado de flujo de trabajo generados con navegador headless en la aplicación real.
+- [x] Documentación exhaustiva en `README.md` con guía de instalación paso a paso y tabla completa de endpoints REST.
 
 ---
 
-## 6. Riesgos Identificados y Mitigaciones
+## 3. Extensiones y Mejoras Opcionales Futuras
 
-| Riesgo | Mitigación |
-|---|---|
-| Diferencias de sintaxis entre MySQL y PostgreSQL | Uso de una capa ORM unificada (Drizzle / Prisma) que abstrae los tipos de datos y dialectos SQL; validación continua en CI con ambos motores. |
-| Bloqueo o desbordamiento en clientes SMTP masivos | Procesamiento asíncrono en workers individuales con límites de tasa (rate limits) y reintentos exponenciales. |
-| Inyecciones en clientes de correo mediante HTML dinámico | Validación con Zod, sanitización de valores CSS, escape estricto de HTML y serialización segura de scripts. |
-| Pérdida de plantillas locales al introducir base de datos | Detección automática de `localStorage` al iniciar sesión con asistente interactivo para importar borradores al workspace. |
+Los siguientes puntos representan características secundarias o ampliaciones futuras que pueden añadirse en versiones posteriores:
+
+1. **Preflight Health Check Widget**:
+   - Herramienta de auditoría preventiva previa al envío que calcule un puntaje de salud del correo (0-100), verificando contraste WCAG de colores, presencia de texto alternativo (`alt`) en imágenes y advertencias si el HTML supera los 102 KB (umbral de recorte de Gmail).
+2. **Endpoint Público de Desuscripción (`/unsubscribe/:token`)**:
+   - Página web pública independiente para que el suscriptor gestione su baja con un clic y cabecera estándar RFC 8058 `List-Unsubscribe: <mailto:...>, <https://...>`.
+3. **Bloques Adicionales de Nicho**:
+   - Componentes modulares pre-ensamblados para comercio electrónico: `pricing-table`, `product-card`, `testimonial-quote`, `badge-pill`.
+4. **Biblioteca de Medios con Almacenamiento en S3 / Disco Local**:
+   - Panel de explorador de archivos para subir imágenes al servidor o a un bucket Amazon S3/Cloudflare R2 en lugar de utilizar URLs públicas externas.
+5. **Workflow de Integración Continua (CI) en GitHub Actions**:
+   - Archivo `.github/workflows/ci.yml` para ejecutar la suite de 156 pruebas en cada pull request contra instancias efímeras de MySQL y PostgreSQL.
+6. **Script CLI de Copias de Seguridad**:
+   - Comando `npm run db:backup` para generar volcados SQL automáticos (`mysqldump` / `pg_dump`).
 
 ---
 
-*PrettierMails Team — Transformación Arquitectónica v2.0*
+## 4. Métricas de Calidad y Verificación Actuales
+
+- **Pruebas Automatizadas**: 156 pruebas unitarias y de integración pasando al 100% (33 test files).
+- **Linter**: ESLint 9+ pasando sin ningún error (`0 errors`).
+- **Base de Datos**: 19 tablas relacionales con migraciones automáticas idempotentes.
+- **Seguridad**: Cifrado AES-256-GCM para contraseñas SMTP, HMAC-SHA256 para webhooks, tokens JWT, protección anti-SSRF y validación estricta Zod en todos los endpoints.
+
+---
+
+*PrettierMails Core Team — Suite Empresarial v2.0*
