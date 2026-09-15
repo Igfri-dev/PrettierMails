@@ -10,12 +10,37 @@ const PRESET_CARD_COLORS = [
   '#ffffff', '#f8fafc', '#1e293b', '#0f172a', '#18181b', '#030712'
 ];
 
-export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
+const ensureHexColor = (val, fallback) => {
+  if (typeof val === 'string' && /^#[0-9a-fA-F]{6}$/.test(val)) {
+    return val;
+  }
+  return fallback;
+};
+
+export default function GlobalSettings({
+  globalSettings = {},
+  setGlobalSettings,
+  updateGlobalSetting,
+}) {
+  const currentSettings = {
+    backgroundColor: '#0f172a',
+    contentBackgroundColor: '#ffffff',
+    contentWidth: '600px',
+    borderRadius: '16px',
+    padding: '32px',
+    textColor: '#1e293b',
+    ...(globalSettings || {}),
+  };
+
   const updateSetting = (key, value) => {
-    setGlobalSettings((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    if (typeof updateGlobalSetting === 'function') {
+      updateGlobalSetting(key, value);
+    } else if (typeof setGlobalSettings === 'function') {
+      setGlobalSettings((prev) => ({
+        ...(prev || currentSettings),
+        [key]: value,
+      }));
+    }
   };
 
   return (
@@ -28,13 +53,13 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
             Fondo Exterior del Email
           </span>
           <span className="text-[11px] font-mono text-slate-400">
-            {globalSettings.backgroundColor}
+            {currentSettings.backgroundColor}
           </span>
         </label>
         <div className="flex items-center gap-2">
           <input
             type="color"
-            value={globalSettings.backgroundColor}
+            value={ensureHexColor(currentSettings.backgroundColor, '#0f172a')}
             onChange={(e) => updateSetting('backgroundColor', e.target.value)}
             className="w-8 h-8 rounded-lg border border-slate-700 cursor-pointer bg-transparent"
           />
@@ -45,7 +70,7 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
                 type="button"
                 onClick={() => updateSetting('backgroundColor', color)}
                 className={`w-5 h-5 rounded-md border transition-transform hover:scale-110 ${
-                  globalSettings.backgroundColor === color
+                  (currentSettings.backgroundColor || '').toLowerCase() === color.toLowerCase()
                     ? 'ring-2 ring-brand-400 border-white'
                     : 'border-slate-700'
                 }`}
@@ -64,13 +89,13 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
             Fondo de la Tarjeta Interior
           </span>
           <span className="text-[11px] font-mono text-slate-400">
-            {globalSettings.contentBackgroundColor}
+            {currentSettings.contentBackgroundColor}
           </span>
         </label>
         <div className="flex items-center gap-2">
           <input
             type="color"
-            value={globalSettings.contentBackgroundColor}
+            value={ensureHexColor(currentSettings.contentBackgroundColor, '#ffffff')}
             onChange={(e) => updateSetting('contentBackgroundColor', e.target.value)}
             className="w-8 h-8 rounded-lg border border-slate-700 cursor-pointer bg-transparent"
           />
@@ -81,7 +106,7 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
                 type="button"
                 onClick={() => updateSetting('contentBackgroundColor', color)}
                 className={`w-5 h-5 rounded-md border transition-transform hover:scale-110 ${
-                  globalSettings.contentBackgroundColor === color
+                  (currentSettings.contentBackgroundColor || '').toLowerCase() === color.toLowerCase()
                     ? 'ring-2 ring-brand-400 border-white'
                     : 'border-slate-700'
                 }`}
@@ -100,7 +125,7 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
             Ancho Máximo del Email
           </span>
           <span className="text-[11px] font-mono text-slate-400">
-            {globalSettings.contentWidth}
+            {currentSettings.contentWidth}
           </span>
         </label>
         <div className="grid grid-cols-3 gap-2">
@@ -110,7 +135,7 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
               type="button"
               onClick={() => updateSetting('contentWidth', width)}
               className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition ${
-                globalSettings.contentWidth === width
+                currentSettings.contentWidth === width
                   ? 'bg-brand-600 text-white border-brand-500 shadow'
                   : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
               }`}
@@ -125,7 +150,7 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
       <div className="space-y-2">
         <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
           <span>Esquinas Redondeadas</span>
-          <span className="text-[11px] font-mono text-slate-400">{globalSettings.borderRadius}</span>
+          <span className="text-[11px] font-mono text-slate-400">{currentSettings.borderRadius}</span>
         </label>
         <div className="grid grid-cols-4 gap-1.5">
           {['0px', '8px', '16px', '24px'].map((radius) => (
@@ -134,7 +159,7 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
               type="button"
               onClick={() => updateSetting('borderRadius', radius)}
               className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition ${
-                globalSettings.borderRadius === radius
+                currentSettings.borderRadius === radius
                   ? 'bg-brand-600 text-white border-brand-500'
                   : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
               }`}
@@ -149,7 +174,7 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
       <div className="space-y-2">
         <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
           <span>Relleno Interior (Padding)</span>
-          <span className="text-[11px] font-mono text-slate-400">{globalSettings.padding}</span>
+          <span className="text-[11px] font-mono text-slate-400">{currentSettings.padding}</span>
         </label>
         <div className="grid grid-cols-3 gap-2">
           {['20px', '32px', '44px'].map((pad) => (
@@ -158,7 +183,7 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
               type="button"
               onClick={() => updateSetting('padding', pad)}
               className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition ${
-                globalSettings.padding === pad
+                currentSettings.padding === pad
                   ? 'bg-brand-600 text-white border-brand-500'
                   : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
               }`}
@@ -176,12 +201,12 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
             <Type className="w-3.5 h-3.5 text-amber-400" />
             Color de Texto Predeterminado
           </span>
-          <span className="text-[11px] font-mono text-slate-400">{globalSettings.textColor}</span>
+          <span className="text-[11px] font-mono text-slate-400">{currentSettings.textColor}</span>
         </label>
         <div className="flex items-center gap-2">
           <input
             type="color"
-            value={globalSettings.textColor}
+            value={ensureHexColor(currentSettings.textColor, '#1e293b')}
             onChange={(e) => updateSetting('textColor', e.target.value)}
             className="w-8 h-8 rounded-lg border border-slate-700 cursor-pointer bg-transparent"
           />
@@ -192,7 +217,7 @@ export default function GlobalSettings({ globalSettings, setGlobalSettings }) {
                 type="button"
                 onClick={() => updateSetting('textColor', c)}
                 className={`w-5 h-5 rounded-md border transition-transform hover:scale-110 ${
-                  globalSettings.textColor === c
+                  (currentSettings.textColor || '').toLowerCase() === c.toLowerCase()
                     ? 'ring-2 ring-brand-400 border-white'
                     : 'border-slate-700'
                 }`}

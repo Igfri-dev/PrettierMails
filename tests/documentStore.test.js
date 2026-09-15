@@ -150,4 +150,60 @@ describe('Document Store (Zustand & Undo/Redo)', () => {
     const state = useDocumentStore.getState();
     expect(state.past.length).toBeLessThanOrEqual(50);
   });
+
+  it('updates globalSettings with an object without wiping other properties', () => {
+    const { setGlobalSettings } = useDocumentStore.getState();
+    setGlobalSettings({ backgroundColor: '#1e293b' });
+
+    const state = useDocumentStore.getState();
+    expect(state.globalSettings.backgroundColor).toBe('#1e293b');
+    expect(state.globalSettings.contentBackgroundColor).toBe('#ffffff');
+    expect(state.globalSettings.contentWidth).toBe('600px');
+    expect(state.globalSettings.borderRadius).toBe('16px');
+    expect(state.isDirty).toBe(true);
+  });
+
+  it('supports updater function in setGlobalSettings (prev => ...) and preserves layout', () => {
+    const { setGlobalSettings, undo } = useDocumentStore.getState();
+    
+    // Simulate what GlobalSettings.jsx does
+    setGlobalSettings((prev) => ({
+      ...prev,
+      backgroundColor: '#eff6ff',
+    }));
+
+    let state = useDocumentStore.getState();
+    expect(state.globalSettings.backgroundColor).toBe('#eff6ff');
+    expect(state.globalSettings.contentBackgroundColor).toBe('#ffffff');
+    expect(state.globalSettings.contentWidth).toBe('600px');
+    expect(state.globalSettings.padding).toBe('32px');
+
+    // Change inner content background as well
+    setGlobalSettings((prev) => ({
+      ...prev,
+      contentBackgroundColor: '#0f172a',
+    }));
+
+    state = useDocumentStore.getState();
+    expect(state.globalSettings.backgroundColor).toBe('#eff6ff');
+    expect(state.globalSettings.contentBackgroundColor).toBe('#0f172a');
+    expect(state.globalSettings.contentWidth).toBe('600px');
+
+    // Undo should restore previous inner background
+    undo();
+    state = useDocumentStore.getState();
+    expect(state.globalSettings.contentBackgroundColor).toBe('#ffffff');
+    expect(state.globalSettings.backgroundColor).toBe('#eff6ff');
+  });
+
+  it('updates individual setting with updateGlobalSetting', () => {
+    const { updateGlobalSetting } = useDocumentStore.getState();
+    updateGlobalSetting('backgroundColor', '#f8fafc');
+    updateGlobalSetting('contentWidth', '680px');
+
+    const state = useDocumentStore.getState();
+    expect(state.globalSettings.backgroundColor).toBe('#f8fafc');
+    expect(state.globalSettings.contentWidth).toBe('680px');
+    expect(state.globalSettings.contentBackgroundColor).toBe('#ffffff');
+  });
 });

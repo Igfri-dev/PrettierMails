@@ -26,7 +26,7 @@ export default function Canvas({
   onMoveDown,
   onReorderBlocks,
   onAddBlock,
-  globalSettings,
+  globalSettings = {},
   previewMode,
   concurrentEditorName,
   onOpenTemplates,
@@ -34,6 +34,16 @@ export default function Canvas({
 }) {
   const isMobile = previewMode === 'mobile';
   const [dropTargetIndex, setDropTargetIndex] = useState(null);
+
+  const activeSettings = {
+    backgroundColor: '#0f172a',
+    contentBackgroundColor: '#ffffff',
+    contentWidth: '600px',
+    borderRadius: '16px',
+    padding: '32px',
+    textColor: '#1e293b',
+    ...(globalSettings || {}),
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -87,7 +97,7 @@ export default function Canvas({
     <div
       onClick={() => onSelectBlock(null)}
       className="flex-1 h-full overflow-y-auto p-4 sm:p-8 flex flex-col items-center justify-start transition-colors duration-300 relative"
-      style={{ backgroundColor: globalSettings.backgroundColor }}
+      style={{ backgroundColor: activeSettings.backgroundColor }}
     >
       {/* Device Mode Badge Indicator */}
       <div className="mb-4 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur border border-slate-700/60 shadow-md text-xs font-semibold text-slate-300 flex items-center space-x-2 select-none">
@@ -99,7 +109,7 @@ export default function Canvas({
         ) : (
           <>
             <Monitor className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Vista Escritorio ({globalSettings.contentWidth})</span>
+            <span>Vista Escritorio ({activeSettings.contentWidth})</span>
           </>
         )}
       </div>
@@ -126,11 +136,11 @@ export default function Canvas({
           isMobile ? 'ring-8 ring-slate-800 rounded-[36px]' : ''
         }`}
         style={{
-          maxWidth: isMobile ? '375px' : globalSettings.contentWidth,
-          backgroundColor: globalSettings.contentBackgroundColor,
-          borderRadius: isMobile ? '32px' : globalSettings.borderRadius,
-          padding: isMobile ? '20px' : globalSettings.padding,
-          color: globalSettings.textColor,
+          maxWidth: isMobile ? '375px' : activeSettings.contentWidth,
+          backgroundColor: activeSettings.contentBackgroundColor,
+          borderRadius: isMobile ? '32px' : activeSettings.borderRadius,
+          padding: isMobile ? '20px' : activeSettings.padding,
+          color: activeSettings.textColor,
         }}
       >
         {/* If in mobile frame, show top notch */}

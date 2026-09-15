@@ -58,6 +58,7 @@ export default function App() {
     previewText,
     globalSettings,
     setGlobalSettings,
+    updateGlobalSetting,
     blocks,
     selectedBlockId,
     setSelectedBlockId,
@@ -564,6 +565,7 @@ export default function App() {
                     <GlobalSettings
                       globalSettings={globalSettings}
                       setGlobalSettings={setGlobalSettings}
+                      updateGlobalSetting={updateGlobalSetting}
                     />
                   </div>
                 )}

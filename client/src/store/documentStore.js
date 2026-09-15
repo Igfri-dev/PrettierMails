@@ -125,16 +125,30 @@ export const useDocumentStore = create((set, get) => ({
     set({ previewText, isDirty: true });
   },
 
-  setGlobalSettings: (settings) => {
+  setGlobalSettings: (settingsOrUpdater) => {
     get().pushSnapshot();
-    set({ globalSettings: { ...settings }, isDirty: true });
+    const current = get().globalSettings || defaultGlobalSettings;
+    const resolved =
+      typeof settingsOrUpdater === 'function'
+        ? settingsOrUpdater(current)
+        : settingsOrUpdater;
+
+    set({
+      globalSettings: {
+        ...defaultGlobalSettings,
+        ...current,
+        ...(resolved || {}),
+      },
+      isDirty: true,
+    });
   },
 
   updateGlobalSetting: (key, value) => {
     get().pushSnapshot();
     set((state) => ({
       globalSettings: {
-        ...state.globalSettings,
+        ...defaultGlobalSettings,
+        ...(state.globalSettings || {}),
         [key]: value,
       },
       isDirty: true,
