@@ -192,7 +192,31 @@ export default {
         return `<tr><td><p style="margin: 0; font-size: ${sanitizeCssValue(child.data?.fontSize, '14px')}; color: ${sanitizeColor(child.data?.color, '#475569')}; line-height: 1.6;">${formatTextContent(child.data?.content || '')}</p></td></tr>`;
       }
       if (child.type === 'button') {
-        return `<tr><td style="padding-top: 10px;"><a href="${sanitizeUrl(child.data?.url, '#')}" style="display: inline-block; padding: 10px 20px; background-color: ${sanitizeColor(child.data?.backgroundColor, '#2563eb')}; color: ${sanitizeColor(child.data?.textColor, '#ffffff')}; border-radius: 8px; font-weight: bold; font-size: 13px; text-decoration: none;">${escapeHtml(child.data?.text || 'Botón')}</a></td></tr>`;
+        const btnAlign = sanitizeCssValue(child.data?.alignment, 'left');
+        const btnBg = sanitizeColor(child.data?.backgroundColor, '#2563eb');
+        const btnTextColor = sanitizeColor(child.data?.textColor, '#ffffff');
+        const btnRadius = sanitizeCssValue(child.data?.borderRadius, '8px');
+        const btnPadY = sanitizeCssValue(child.data?.paddingY, '10px');
+        const btnPadX = sanitizeCssValue(child.data?.paddingX, '20px');
+        const btnFontSize = sanitizeCssValue(child.data?.fontSize, '13px');
+        const btnFontWeight = sanitizeCssValue(child.data?.fontWeight, '700');
+        const btnUrl = sanitizeUrl(child.data?.url, '#');
+
+        return `
+          <tr>
+            <td align="${btnAlign}" style="padding-top: 10px; padding-bottom: 4px; text-align: ${btnAlign};">
+              <table border="0" cellpadding="0" cellspacing="0" align="${btnAlign}" role="presentation" style="margin: ${btnAlign === 'center' ? '0 auto' : btnAlign === 'right' ? '0 0 0 auto' : '0 auto 0 0'}; border-collapse: separate !important; border-spacing: 0;">
+                <tr>
+                  <td align="center" bgcolor="${btnBg}" valign="middle" style="background-color: ${btnBg}; border-radius: ${btnRadius}; -webkit-border-radius: ${btnRadius}; -moz-border-radius: ${btnRadius}; mso-padding-alt: ${btnPadY} ${btnPadX};">
+                    <a href="${btnUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: ${btnPadY} ${btnPadX}; mso-padding-alt: 0px; font-family: inherit; font-size: ${btnFontSize}; font-weight: ${btnFontWeight}; color: ${btnTextColor}; text-decoration: none; border-radius: ${btnRadius}; -webkit-border-radius: ${btnRadius}; -moz-border-radius: ${btnRadius}; background-color: ${btnBg}; text-align: center; border: 1px solid ${btnBg}; line-height: 120%;">
+                      ${escapeHtml(child.data?.text || 'Botón')}
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        `;
       }
       return '';
     }).join('');

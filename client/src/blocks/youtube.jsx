@@ -174,32 +174,40 @@ export default {
     return `
       <tr>
         <td style="padding-top: ${safePadTop}; padding-bottom: ${safePadBottom};">
-          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: ${safeCardBg}; border-radius: ${safeBorderRadius}; overflow: hidden; border-collapse: separate; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: ${safeCardBg}; border-radius: ${safeBorderRadius}; -webkit-border-radius: ${safeBorderRadius}; -moz-border-radius: ${safeBorderRadius}; overflow: hidden; border-collapse: separate !important; border-spacing: 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);" bgcolor="${safeCardBg}">
             <tr>
-              <td align="center" style="padding: 0; position: relative;">
-                <a href="${watchUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: block; position: relative;">
-                  <div style="position: relative; width: 100%; max-height: 340px; overflow: hidden; background-color: #000000; border-top-left-radius: ${safeBorderRadius}; border-top-right-radius: ${safeBorderRadius};">
-                    <img src="${thumbnail}" alt="${escapeHtml(title)}" width="600" style="display: block; width: 100%; height: auto; max-height: 340px; object-fit: cover; opacity: 0.9;" />
-                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; text-align: center;">
-                      <tr>
-                        <td align="center" valign="middle">
-                          <table border="0" cellpadding="0" cellspacing="0" style="background: rgba(255, 0, 0, 0.95); border-radius: 16px; padding: 14px 28px; box-shadow: 0 8px 16px rgba(0,0,0,0.5);">
-                            <tr>
-                              <td style="color: #ffffff; font-size: 20px; font-weight: bold; font-family: sans-serif; text-decoration: none;">
-                                ▶ REPRODUCIR
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                  </div>
-                </a>
+              <td align="center" valign="middle" background="${thumbnail}" bgcolor="#000000" class="video-thumbnail-container" style="padding: 0; background-color: #000000; background-image: url('${thumbnail}'); background-size: cover; background-position: center center; background-repeat: no-repeat; height: 338px; text-align: center; border-top-left-radius: ${safeBorderRadius}; border-top-right-radius: ${safeBorderRadius};">
+                <!--[if gte mso 9]>
+                <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:338px;" href="${watchUrl}">
+                  <v:fill type="frame" src="${thumbnail}" color="#000000" />
+                  <v:textbox inset="0,0,0,0">
+                  <center>
+                <![endif]-->
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" height="338" class="video-thumbnail-container" style="height: 338px; width: 100%; border-collapse: collapse; border-spacing: 0;">
+                  <tr>
+                    <td align="center" valign="middle" style="text-align: center; vertical-align: middle;">
+                      <table border="0" cellpadding="0" cellspacing="0" align="center" role="presentation" style="margin: 0 auto; background-color: #ef4444; border-radius: 14px; -webkit-border-radius: 14px; -moz-border-radius: 14px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); border-collapse: separate; border-spacing: 0;">
+                        <tr>
+                          <td align="center" valign="middle" bgcolor="#ef4444" style="background-color: #ef4444; border-radius: 14px; -webkit-border-radius: 14px; -moz-border-radius: 14px; mso-padding-alt: 12px 24px; padding: 0;">
+                            <a href="${watchUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 12px 24px; mso-padding-alt: 0px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; font-weight: bold; color: #ffffff; text-decoration: none; border-radius: 14px; -webkit-border-radius: 14px; -moz-border-radius: 14px; letter-spacing: 0.5px; line-height: 120%; background-color: #ef4444; border: 1px solid #ef4444;">
+                              &#9658;&nbsp;&nbsp;REPRODUCIR
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+                <!--[if gte mso 9]>
+                  </center>
+                  </v:textbox>
+                </v:rect>
+                <![endif]-->
               </td>
             </tr>
             <tr>
               <td style="padding: 18px 24px 22px 24px;">
-                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse; border-spacing: 0;">
                   ${title ? `
                     <tr>
                       <td>
@@ -219,11 +227,11 @@ export default {
                     </tr>
                   ` : ''}
                   <tr>
-                    <td align="left">
-                      <table border="0" cellpadding="0" cellspacing="0">
+                    <td align="left" style="text-align: left;">
+                      <table border="0" cellpadding="0" cellspacing="0" align="left" role="presentation" style="margin: 0 auto 0 0; border-collapse: separate; border-spacing: 0;">
                         <tr>
-                          <td align="center" style="background-color: #ef4444; border-radius: 8px;">
-                            <a href="${watchUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 20px; font-family: inherit; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 8px; background-color: #ef4444;">
+                          <td align="center" valign="middle" bgcolor="#ef4444" style="background-color: #ef4444; border-radius: 8px; -webkit-border-radius: 8px; -moz-border-radius: 8px; mso-padding-alt: 10px 20px;">
+                            <a href="${watchUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 20px; mso-padding-alt: 0px; font-family: inherit; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 8px; -webkit-border-radius: 8px; -moz-border-radius: 8px; background-color: #ef4444; line-height: 120%; border: 1px solid #ef4444; text-align: center;">
                               ${escapeHtml(buttonText)}
                             </a>
                           </td>

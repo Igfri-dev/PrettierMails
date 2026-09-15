@@ -41,4 +41,15 @@ describe('Server htmlRenderer Security & Inlining', () => {
     const inlined = renderEmailHtml(htmlWithClasses);
     expect(inlined).toContain('style="color: #2563eb; font-size: 20px;"');
   });
+
+  it('includes VML namespaces, OfficeDocumentSettings, and .video-thumbnail-container media query', () => {
+    const rendered = renderEmailHtml('<tr><td>Prueba</td></tr>', {
+      title: 'Compatibilidad Outlook & Gmail',
+    });
+
+    expect(rendered).toContain('xmlns:v="urn:schemas-microsoft-com:vml"');
+    expect(rendered).toContain('xmlns:o="urn:schemas-microsoft-com:office:office"');
+    expect(rendered).toContain('<o:OfficeDocumentSettings>');
+    expect(rendered).toContain('.video-thumbnail-container');
+  });
 });

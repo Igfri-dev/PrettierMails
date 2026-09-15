@@ -1,6 +1,6 @@
 import React from 'react';
 import { Columns2 } from 'lucide-react';
-import { renderFormattedText, formatTextContent, escapeHtml, sanitizeUrl, sanitizeColor, sanitizeCssValue } from './blockHelpers.jsx';
+import { renderFormattedText, formatTextContent, escapeHtml, sanitizeUrl, sanitizeColor } from './blockHelpers.jsx';
 import { GridBlockDataSchema } from '../schemas/documentSchema.js';
 
 export default {
@@ -259,11 +259,21 @@ export default {
       const imgTag = `<img src="${imgUrl}" alt="${escapeHtml(rightImage?.alt || 'Imagen')}" width="${(rightImage?.width || '100%').replace('%', '')}" style="display: block; ${marginCss} max-width: ${rightImage?.maxWidth || '100%'}; width: ${rightImage?.width || '100%'}; height: auto; border-radius: ${rightImage?.borderRadius || '8px'}; border: 0; outline: none; text-decoration: none;" />`;
       rightColHtml = safeLink ? `<a href="${safeLink}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">${imgTag}</a>` : imgTag;
     } else {
+      const btnAlign = rightText?.alignment || 'left';
+      const btnBg = sanitizeColor(rightText?.buttonBgColor, '#2563eb');
+      const btnTextColor = sanitizeColor(rightText?.buttonTextColor, '#ffffff');
+      const btnUrl = sanitizeUrl(rightText?.buttonUrl, '#');
       const btnHtml = rightText?.buttonText ? `
-        <div style="margin-top: 10px; text-align: ${rightText.alignment || 'left'};">
-          <a href="${sanitizeUrl(rightText.buttonUrl, '#')}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 18px; font-size: 13px; font-weight: 700; color: ${rightText.buttonTextColor || '#ffffff'}; background-color: ${rightText.buttonBgColor || '#2563eb'}; border-radius: 8px; text-decoration: none; font-family: inherit;">
-            ${escapeHtml(rightText.buttonText)}
-          </a>
+        <div style="margin-top: 10px; text-align: ${btnAlign};">
+          <table border="0" cellpadding="0" cellspacing="0" align="${btnAlign}" role="presentation" style="margin: ${btnAlign === 'center' ? '0 auto' : btnAlign === 'right' ? '0 0 0 auto' : '0 auto 0 0'}; border-collapse: separate !important; border-spacing: 0;">
+            <tr>
+              <td align="center" bgcolor="${btnBg}" valign="middle" style="background-color: ${btnBg}; border-radius: 8px; -webkit-border-radius: 8px; -moz-border-radius: 8px; mso-padding-alt: 8px 18px;">
+                <a href="${btnUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 18px; mso-padding-alt: 0px; font-size: 13px; font-weight: 700; color: ${btnTextColor}; background-color: ${btnBg}; border-radius: 8px; -webkit-border-radius: 8px; -moz-border-radius: 8px; text-decoration: none; font-family: inherit; line-height: 120%; border: 1px solid ${btnBg}; text-align: center;">
+                  ${escapeHtml(rightText.buttonText)}
+                </a>
+              </td>
+            </tr>
+          </table>
         </div>
       ` : '';
       rightColHtml = `

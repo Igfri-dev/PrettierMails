@@ -97,11 +97,11 @@ export default {
 
     return `
       <tr>
-        <td align="${safeAlign}" style="padding: 16px 0;">
-          <table border="0" cellpadding="0" cellspacing="0" ${fullWidth ? 'width="100%"' : ''} style="margin: ${safeAlign === 'center' ? '0 auto' : safeAlign === 'right' ? '0 0 0 auto' : '0 auto 0 0'};">
+        <td align="${safeAlign}" style="padding: 16px 0; text-align: ${safeAlign};">
+          <table border="0" cellpadding="0" cellspacing="0" align="${safeAlign}" role="presentation" ${fullWidth ? 'width="100%"' : ''} style="margin: ${safeAlign === 'center' ? '0 auto' : safeAlign === 'right' ? '0 0 0 auto' : '0 auto 0 0'}; border-collapse: separate !important; border-spacing: 0;">
             <tr>
-              <td align="center" style="background-color: ${safeBg}; border-radius: ${safeBorderRadius};">
-                <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: ${safePadY} ${safePadX}; font-family: inherit; font-size: ${safeFontSize}; font-weight: ${safeFontWeight}; color: ${safeTextColor}; text-decoration: none; border-radius: ${safeBorderRadius}; background-color: ${safeBg}; text-align: center; border: 1px solid ${safeBg}; box-shadow: ${safeShadow}; letter-spacing: ${safeLetterSpacing}; ${fullWidth ? 'width: 100%; box-sizing: border-box;' : ''}">
+              <td align="center" bgcolor="${safeBg}" valign="middle" style="background-color: ${safeBg}; border-radius: ${safeBorderRadius}; -webkit-border-radius: ${safeBorderRadius}; -moz-border-radius: ${safeBorderRadius}; mso-padding-alt: ${safePadY} ${safePadX}; box-shadow: ${safeShadow};">
+                <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display: ${fullWidth ? 'block' : 'inline-block'}; padding: ${safePadY} ${safePadX}; mso-padding-alt: 0px; font-family: inherit; font-size: ${safeFontSize}; font-weight: ${safeFontWeight}; color: ${safeTextColor}; text-decoration: none; border-radius: ${safeBorderRadius}; -webkit-border-radius: ${safeBorderRadius}; -moz-border-radius: ${safeBorderRadius}; background-color: ${safeBg}; text-align: center; border: 1px solid ${safeBg}; box-sizing: border-box; letter-spacing: ${safeLetterSpacing}; line-height: 120%; ${fullWidth ? 'width: 100%;' : ''}">
                   ${escapeHtml(text)}
                 </a>
               </td>

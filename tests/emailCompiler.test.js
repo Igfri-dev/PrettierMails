@@ -138,4 +138,65 @@ describe('emailCompiler Security & Sanitization Utilities', () => {
       expect(restored.template.blocks[0].data.content).toBe(maliciousPayload);
     });
   });
+
+  describe('Bulletproof Email Buttons & Media Compatibility (Outlook, Gmail, iCloud)', () => {
+    it('compiles button block with mso-padding-alt, bgcolor, and table presentation for Outlook & Gmail', () => {
+      const buttonHtml = compileBlockToHtml({
+        type: 'button',
+        data: {
+          text: 'Comenzar Ahora',
+          url: 'https://example.com/start',
+          backgroundColor: '#6366f1',
+          textColor: '#ffffff',
+          borderRadius: '10px',
+          alignment: 'center',
+          paddingX: '28px',
+          paddingY: '14px',
+        },
+      });
+
+      expect(buttonHtml).toContain('mso-padding-alt: 14px 28px');
+      expect(buttonHtml).toContain('bgcolor="#6366f1"');
+      expect(buttonHtml).toContain('align="center"');
+      expect(buttonHtml).toContain('role="presentation"');
+      expect(buttonHtml).toContain('border-radius: 10px');
+      expect(buttonHtml).toContain('Comenzar Ahora');
+    });
+
+    it('compiles YouTube block with background image, VML rect for Outlook, and vertically centered play button without position: absolute', () => {
+      const ytHtml = compileBlockToHtml({
+        type: 'youtube',
+        data: {
+          url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          title: 'Aprende a Diseñar Mails',
+          buttonText: 'Ver Video en YouTube',
+        },
+      });
+
+      // Does NOT rely on position: absolute (which Gmail & Outlook strip)
+      expect(ytHtml).not.toContain('position: absolute');
+      // Uses table background and background-image for universal centering
+      expect(ytHtml).toContain('background="https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"');
+      expect(ytHtml).toContain('background-image: url(\'https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg\')');
+      // Contains VML rect for Outlook desktop
+      expect(ytHtml).toContain('<v:rect xmlns:v="urn:schemas-microsoft-com:vml"');
+      expect(ytHtml).toContain('<v:fill type="frame"');
+      // Contains bulletproof play button and CTA button
+      expect(ytHtml).toContain('REPRODUCIR');
+      expect(ytHtml).toContain('mso-padding-alt: 12px 24px');
+      expect(ytHtml).toContain('mso-padding-alt: 10px 20px');
+    });
+
+    it('includes VML namespaces, OfficeDocumentSettings, and responsive video classes in full email HTML', () => {
+      const fullHtml = compileFullEmailHtml({
+        blocks: [],
+        subject: 'Compatibility Test',
+      });
+
+      expect(fullHtml).toContain('xmlns:v="urn:schemas-microsoft-com:vml"');
+      expect(fullHtml).toContain('xmlns:o="urn:schemas-microsoft-com:office:office"');
+      expect(fullHtml).toContain('<o:OfficeDocumentSettings>');
+      expect(fullHtml).toContain('.video-thumbnail-container');
+    });
+  });
 });
