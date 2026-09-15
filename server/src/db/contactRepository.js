@@ -133,10 +133,37 @@ export async function listContacts(workspaceId, options = {}) {
   `;
 
   const res = await executeQuery(sql, [workspaceId]);
+
+  // Map list names and memberships
+  const listNameMap = new Map();
+  try {
+    const listRes = await executeQuery('SELECT id, name FROM contact_lists WHERE workspace_id = ?', [workspaceId]);
+    for (const l of listRes.rows || []) {
+      listNameMap.set(l.id, l.name);
+    }
+  } catch {}
+
+  const memMap = new Map();
+  try {
+    const memRes = await executeQuery('SELECT list_id, contact_id FROM contact_list_members');
+    for (const m of memRes.rows || []) {
+      if (listNameMap.has(m.list_id)) {
+        if (!memMap.has(m.contact_id)) {
+          memMap.set(m.contact_id, []);
+        }
+        memMap.get(m.contact_id).push({
+          id: m.list_id,
+          name: listNameMap.get(m.list_id),
+        });
+      }
+    }
+  } catch {}
+
   let contacts = (res.rows || []).map((row) => ({
     ...row,
     custom_fields: parseCustomFields(row.custom_fields),
     is_subscribed: Boolean(row.is_subscribed),
+    lists: memMap.get(row.id) || [],
   }));
 
   // Filter by list membership

@@ -120,4 +120,47 @@ tester2@beta.org,Pablo,Ríos,Beta Labs`;
     });
     expect(delRes.status).toBe(200);
   });
+
+  it('creates contact directly assigned to a list and verifies membership and enriched lists', async () => {
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${adminToken}`,
+      'x-workspace-id': workspaceId,
+    };
+
+    // 1. Create a list
+    const createListRes = await fetch(`${baseUrl}/api/contacts/lists`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: 'Direct Enrolled List',
+        description: 'Test list',
+      }),
+    });
+    const listData = await createListRes.json();
+
+    // 2. Create contact directly with listId
+    const createContactRes = await fetch(`${baseUrl}/api/contacts`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        email: 'direct@acme.com',
+        firstName: 'Carlos',
+        lastName: 'Santana',
+        listId: listData.id,
+      }),
+    });
+    expect(createContactRes.status).toBe(201);
+
+    // 3. Query contacts in that list
+    const listMembersRes = await fetch(
+      `${baseUrl}/api/contacts?listId=${encodeURIComponent(listData.id)}`,
+      { headers }
+    );
+    const members = await listMembersRes.json();
+    expect(members.length).toBe(1);
+    expect(members[0].email).toBe('direct@acme.com');
+    expect(members[0].lists).toBeDefined();
+    expect(members[0].lists.some((l) => l.id === listData.id)).toBe(true);
+  });
 });

@@ -27,6 +27,7 @@ import {
   listContactLists,
   createContactList,
   deleteContactList,
+  addMembersToList,
 } from '../../services/contactApi.js';
 import useAuthStore from '../../store/authStore.js';
 
@@ -50,8 +51,14 @@ export default function ContactsModal({ isOpen, onClose }) {
     firstName: '',
     lastName: '',
     isSubscribed: true,
+    targetListId: '',
     customFieldsText: '',
   });
+
+  // Manage List Members Modal State
+  const [managingList, setManagingList] = useState(null);
+  const [selectedContactIdsForList, setSelectedContactIdsForList] = useState([]);
+  const [isSavingListMembers, setIsSavingListMembers] = useState(false);
 
   // New List Form State
   const [isCreatingList, setIsCreatingList] = useState(false);
@@ -130,6 +137,9 @@ export default function ContactsModal({ isOpen, onClose }) {
           isSubscribed: contactForm.isSubscribed,
           customFields: parsedCustomFields,
         });
+        if (contactForm.targetListId) {
+          await addMembersToList(contactForm.targetListId, [contactIdToEdit]);
+        }
         setSuccessMsg('Contacto actualizado con éxito.');
       } else {
         await createContact({
@@ -138,6 +148,7 @@ export default function ContactsModal({ isOpen, onClose }) {
           lastName: contactForm.lastName,
           isSubscribed: contactForm.isSubscribed,
           customFields: parsedCustomFields,
+          listId: contactForm.targetListId || undefined,
         });
         setSuccessMsg('Contacto registrado con éxito.');
       }
@@ -149,6 +160,7 @@ export default function ContactsModal({ isOpen, onClose }) {
         firstName: '',
         lastName: '',
         isSubscribed: true,
+        targetListId: '',
         customFieldsText: '',
       });
       loadData();
@@ -165,11 +177,40 @@ export default function ContactsModal({ isOpen, onClose }) {
       firstName: contact.first_name || '',
       lastName: contact.last_name || '',
       isSubscribed: contact.is_subscribed !== false,
+      targetListId: contact.lists?.[0]?.id || '',
       customFieldsText: contact.custom_fields && Object.keys(contact.custom_fields).length > 0
         ? JSON.stringify(contact.custom_fields, null, 2)
         : '',
     });
     setIsEditingContact(true);
+  };
+
+  // Open Manage Members for a List
+  const handleOpenManageMembers = (list) => {
+    setManagingList(list);
+    const existingMemberIds = (contacts || [])
+      .filter((c) => c.lists?.some((lst) => lst.id === list.id))
+      .map((c) => c.id);
+    setSelectedContactIdsForList(existingMemberIds);
+  };
+
+  // Save Members to List
+  const handleSaveListMembers = async () => {
+    if (!managingList) return;
+    setIsSavingListMembers(true);
+    try {
+      if (selectedContactIdsForList.length > 0) {
+        await addMembersToList(managingList.id, selectedContactIdsForList);
+      }
+      setSuccessMsg(`Lista "${managingList.name}" actualizada con éxito.`);
+      setManagingList(null);
+      setSelectedContactIdsForList([]);
+      loadData();
+    } catch (err) {
+      setErrorMsg(err.message || 'Error al actualizar miembros de la lista.');
+    } finally {
+      setIsSavingListMembers(false);
+    }
   };
 
   // Delete Contact
@@ -397,6 +438,7 @@ export default function ContactsModal({ isOpen, onClose }) {
                       firstName: '',
                       lastName: '',
                       isSubscribed: true,
+                      targetListId: selectedListFilter || '',
                       customFieldsText: '',
                     });
                   }}
@@ -451,7 +493,24 @@ export default function ContactsModal({ isOpen, onClose }) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                        Asignar a Lista (Opcional)
+                      </label>
+                      <select
+                        value={contactForm.targetListId}
+                        onChange={(e) => setContactForm({ ...contactForm, targetListId: e.target.value })}
+                        className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                      >
+                        <option value="">Sin lista específica (Contacto general)</option>
+                        {lists.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1">
                         Campos Personalizados (JSON)
@@ -517,6 +576,7 @@ export default function ContactsModal({ isOpen, onClose }) {
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
                         <th className="py-2.5 px-4">Contacto</th>
                         <th className="py-2.5 px-4">Nombre Completo</th>
+                        <th className="py-2.5 px-4">Listas</th>
                         <th className="py-2.5 px-4">Variables / Campos</th>
                         <th className="py-2.5 px-4">Estado</th>
                         <th className="py-2.5 px-4 text-right">Acciones</th>
@@ -533,6 +593,22 @@ export default function ContactsModal({ isOpen, onClose }) {
                           </td>
                           <td className="py-2.5 px-4 text-slate-600">
                             {c.first_name || c.last_name ? `${c.first_name || ''} ${c.last_name || ''}`.trim() : '—'}
+                          </td>
+                          <td className="py-2.5 px-4">
+                            {c.lists && c.lists.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 max-w-[150px]">
+                                {c.lists.map((lst) => (
+                                  <span
+                                    key={lst.id}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                  >
+                                    {lst.name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-[11px]">—</span>
+                            )}
                           </td>
                           <td className="py-2.5 px-4">
                             {c.custom_fields && Object.keys(c.custom_fields).length > 0 ? (
@@ -680,15 +756,24 @@ export default function ContactsModal({ isOpen, onClose }) {
                     </div>
 
                     <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100 text-xs">
-                      <button
-                        onClick={() => {
-                          setSelectedListFilter(l.id);
-                          setActiveTab('contacts');
-                        }}
-                        className="text-indigo-600 hover:text-indigo-800 font-medium"
-                      >
-                        Ver contactos →
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => {
+                            setSelectedListFilter(l.id);
+                            setActiveTab('contacts');
+                          }}
+                          className="text-indigo-600 hover:text-indigo-800 font-medium"
+                        >
+                          Ver contactos →
+                        </button>
+                        <button
+                          onClick={() => handleOpenManageMembers(l)}
+                          className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Añadir miembros
+                        </button>
+                      </div>
                       <button
                         onClick={() => handleDeleteList(l.id)}
                         className="text-slate-400 hover:text-red-600 p-1 rounded"
@@ -707,6 +792,94 @@ export default function ContactsModal({ isOpen, onClose }) {
                   </div>
                 )}
               </div>
+
+              {/* Manage Members Modal */}
+              {managingList && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+                  <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <ListFilter className="w-4 h-4 text-indigo-600" />
+                        Añadir Contactos a "{managingList.name}"
+                      </h4>
+                      <button
+                        onClick={() => setManagingList(null)}
+                        className="p-1 rounded text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-slate-500">
+                      Selecciona los contactos de tu espacio que deseas asociar a esta lista:
+                    </p>
+
+                    <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-lg p-1">
+                      {contacts.map((c) => {
+                        const isAlreadyMember = c.lists?.some((lst) => lst.id === managingList.id);
+                        const isChecked = selectedContactIdsForList.includes(c.id) || isAlreadyMember;
+                        return (
+                          <label
+                            key={c.id}
+                            className="flex items-center gap-2.5 p-2 hover:bg-slate-50 rounded cursor-pointer text-xs"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={isAlreadyMember}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedContactIdsForList((prev) => [...prev, c.id]);
+                                } else {
+                                  setSelectedContactIdsForList((prev) => prev.filter((id) => id !== c.id));
+                                }
+                              }}
+                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-slate-800 truncate">{c.email}</div>
+                              {(c.first_name || c.last_name) && (
+                                <div className="text-[11px] text-slate-400">
+                                  {c.first_name} {c.last_name}
+                                </div>
+                              )}
+                            </div>
+                            {isAlreadyMember && (
+                              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                                Ya en lista
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                      {contacts.length === 0 && (
+                        <div className="py-6 text-center text-slate-400 text-xs">
+                          No tienes contactos en este espacio de trabajo.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setManagingList(null)}
+                        className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
+                      >
+                        Cerrar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={selectedContactIdsForList.length === 0 || isSavingListMembers}
+                        onClick={handleSaveListMembers}
+                        className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {isSavingListMembers && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        Añadir Seleccionados ({selectedContactIdsForList.length})
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

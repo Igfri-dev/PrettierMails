@@ -16,9 +16,9 @@ import trackingRouter from './routes/tracking.js';
 import automationsRouter from './routes/automations.js';
 import webhooksRouter from './routes/webhooks.js';
 import { listContacts } from './db/contactRepository.js';
-import { authenticateToken } from './middlewares/auth.js';
+import { authenticateToken, requireWorkspaceRole } from './middlewares/auth.js';
 import { runMigrations } from './db/migrations.js';
-import { runSeeders } from './db/seeders.js';
+import { runSeeders, DEFAULT_WORKSPACE_ID } from './db/seeders.js';
 import { getActiveEngine } from './db/connection.js';
 import {
   validateRequestBody,
@@ -219,9 +219,17 @@ app.post(
   '/api/send-email',
   sendEmailLimiter,
   authenticateToken,
+  requireWorkspaceRole('editor'),
   validateRequestBody(SendEmailSchema),
   async (req, res) => {
     try {
+      const workspaceId =
+        req.workspaceId ||
+        req.headers['x-workspace-id'] ||
+        req.body?.workspaceId ||
+        DEFAULT_WORKSPACE_ID;
+      req.workspaceId = workspaceId;
+
       const {
         recipients,
         contactListId,

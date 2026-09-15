@@ -95,7 +95,8 @@ export default function SendEmailModal({
         if (Array.isArray(lists)) {
           setContactLists(lists);
           if (lists.length > 0 && !selectedListId) {
-            setSelectedListId(lists[0].id);
+            const listWithMembers = lists.find((l) => (l.memberCount || 0) > 0);
+            setSelectedListId(listWithMembers ? listWithMembers.id : lists[0].id);
           }
         }
       })
@@ -154,9 +155,16 @@ export default function SendEmailModal({
       return;
     }
 
-    if (recipientMode === 'list' && !selectedListId) {
-      setErrorMsg('Por favor selecciona una lista de contactos para el envío.');
-      return;
+    if (recipientMode === 'list') {
+      if (!selectedListId) {
+        setErrorMsg('Por favor selecciona una lista de contactos para el envío.');
+        return;
+      }
+      const activeList = contactLists.find((l) => l.id === selectedListId);
+      if (activeList && (activeList.memberCount || 0) === 0) {
+        setErrorMsg(`La lista "${activeList.name}" no tiene contactos asociados todavía (0 miembros). Agrega contactos a la lista desde el gestor de Contactos o usa el modo manual.`);
+        return;
+      }
     }
 
     if (!mailSubject.trim()) {
@@ -223,6 +231,7 @@ export default function SendEmailModal({
   };
 
   const selectedAccount = workspaceAccounts.find((a) => a.id === selectedAccountId);
+  const selectedList = contactLists.find((l) => l.id === selectedListId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
@@ -384,17 +393,28 @@ export default function SendEmailModal({
                   No hay listas creadas en este espacio. Puedes crearlas desde el menú Contactos.
                 </div>
               ) : (
-                <select
-                  value={selectedListId}
-                  onChange={(e) => setSelectedListId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
-                >
-                  {contactLists.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name} ({l.memberCount || 0} miembros)
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-2">
+                  <select
+                    value={selectedListId}
+                    onChange={(e) => setSelectedListId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
+                  >
+                    {contactLists.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name} ({l.memberCount || 0} miembros)
+                      </option>
+                    ))}
+                  </select>
+
+                  {selectedList && (selectedList.memberCount || 0) === 0 && (
+                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <span>
+                        <strong>Esta lista no tiene contactos aún (0 miembros).</strong> Agrega contactos a la lista desde el menú <em>Contactos</em> o utiliza el modo <em>Destinatarios Manuales</em> arriba para enviar este correo ahora.
+                      </span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -663,18 +683,26 @@ export default function SendEmailModal({
           <button
             type="button"
             onClick={handleSend}
-            disabled={isLoading}
-            className="flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 shadow-lg shadow-brand-500/20 transition disabled:opacity-50"
+            disabled={isLoading || (recipientMode === 'list' && (!selectedListId || (selectedList?.memberCount || 0) === 0))}
+            className="flex items-center space-x-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 shadow-lg shadow-brand-500/20 transition disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Enviando {recipients.length} correo(s)...</span>
+                <span>
+                  {recipientMode === 'list'
+                    ? `Enviando a ${selectedList?.memberCount || 0} contacto(s)...`
+                    : `Enviando ${recipients.length} correo(s)...`}
+                </span>
               </>
             ) : (
               <>
                 <Send className="w-4 h-4" />
-                <span>Enviar Ahora</span>
+                <span>
+                  {recipientMode === 'list'
+                    ? `Enviar a Lista (${selectedList?.memberCount || 0})`
+                    : 'Enviar Ahora'}
+                </span>
               </>
             )}
           </button>

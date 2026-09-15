@@ -28,6 +28,7 @@ const CreateContactSchema = z.object({
   lastName: z.string().max(100).optional().default(''),
   customFields: z.record(z.any()).optional().default({}),
   isSubscribed: z.boolean().optional().default(true),
+  listId: z.string().max(64).optional().nullable(),
 });
 
 const UpdateContactSchema = z.object({
@@ -219,10 +220,15 @@ router.post(
   validateRequestBody(CreateContactSchema),
   async (req, res) => {
     try {
+      const { listId, ...contactData } = req.validatedBody;
       const contact = await createContact({
         workspaceId: req.workspaceId,
-        ...req.validatedBody,
+        ...contactData,
       });
+
+      if (listId) {
+        await addContactsToList(listId, [contact.id]);
+      }
 
       res.status(201).json(contact);
     } catch (err) {
