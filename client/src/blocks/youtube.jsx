@@ -148,7 +148,7 @@ export default {
     return <YouTubeCanvasRenderer data={data} />;
   },
 
-  compileHtml(data = {}) {
+  compileHtml(data = {}, globalSettings = {}) {
     const {
       url = 'https://www.youtube.com/watch?v=M7lc1UVf-VE',
       title = 'Mira nuestro último video',
@@ -171,19 +171,25 @@ export default {
     const safePadTop = sanitizeCssValue(paddingTop, '16px');
     const safePadBottom = sanitizeCssValue(paddingBottom, '16px');
 
+    // Compute exact 16:9 aspect ratio dimensions based on global container width and inner padding
+    const maxContentWidth = parseInt(globalSettings?.contentWidth, 10) || 600;
+    const containerPadding = parseInt(globalSettings?.padding, 10) || (globalSettings?.padding === 0 ? 0 : 36);
+    const cardWidth = Math.max(300, maxContentWidth - (containerPadding * 2));
+    const cardHeight = Math.round(cardWidth * 9 / 16);
+
     return `
       <tr>
         <td style="padding-top: ${safePadTop}; padding-bottom: ${safePadBottom};">
           <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: ${safeCardBg}; border-radius: ${safeBorderRadius}; -webkit-border-radius: ${safeBorderRadius}; -moz-border-radius: ${safeBorderRadius}; overflow: hidden; border-collapse: separate !important; border-spacing: 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);" bgcolor="${safeCardBg}">
             <tr>
-              <td align="center" valign="middle" background="${thumbnail}" bgcolor="#000000" class="video-thumbnail-container" style="padding: 0; background-color: #000000; background-image: url('${thumbnail}'); background-size: cover; background-position: center center; background-repeat: no-repeat; height: 338px; text-align: center; border-top-left-radius: ${safeBorderRadius}; border-top-right-radius: ${safeBorderRadius};">
+              <td align="center" valign="middle" background="${thumbnail}" bgcolor="#000000" class="video-thumbnail-container" style="padding: 0; background-color: #000000; background-image: url('${thumbnail}'); background-size: contain; background-repeat: no-repeat; background-position: center center; height: ${cardHeight}px; text-align: center; border-top-left-radius: ${safeBorderRadius}; border-top-right-radius: ${safeBorderRadius};">
                 <!--[if gte mso 9]>
-                <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:338px;" href="${watchUrl}">
+                <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:${cardWidth}px;height:${cardHeight}px;" href="${watchUrl}">
                   <v:fill type="frame" src="${thumbnail}" color="#000000" />
                   <v:textbox inset="0,0,0,0">
                   <center>
                 <![endif]-->
-                <table border="0" cellpadding="0" cellspacing="0" width="100%" height="338" class="video-thumbnail-container" style="height: 338px; width: 100%; border-collapse: collapse; border-spacing: 0;">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" height="${cardHeight}" class="video-thumbnail-container" style="height: ${cardHeight}px; width: 100%; border-collapse: collapse; border-spacing: 0;">
                   <tr>
                     <td align="center" valign="middle" style="text-align: center; vertical-align: middle;">
                       <table border="0" cellpadding="0" cellspacing="0" align="center" role="presentation" style="margin: 0 auto; background-color: #ef4444; border-radius: 14px; -webkit-border-radius: 14px; -moz-border-radius: 14px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); border-collapse: separate; border-spacing: 0;">
